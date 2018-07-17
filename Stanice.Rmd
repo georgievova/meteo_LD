@@ -2,10 +2,10 @@
 title: "Stanice"
 output: 
   flexdashboard::flex_dashboard:
-    theme: bootstrap
     orientation: rows
     vertical_layout: fill
     css: 'styles.css'
+    theme: bootstrap
 runtime: shiny
 ---
 
@@ -19,15 +19,17 @@ library(ggplot2)
 library(plotly)
 library(data.table)
 
-.datadir <- "C:\\Users\\Georgievova\\Documents\\stanice_data\\dlouhodb"
+.datadir <- "C:\\Users\\Georgievova\\Documents\\meteo_LD\\stanice_data\\dlouhodb"
+.datadir_alt <- "C:\\Users\\Georgievova\\Documents\\meteo_LD\\stanice_data\\libor_d_new"
 # .datadir <- "C:\\Users\\Georgievova\\Documents\\stanice_data\\libor_d_new"
 
 bulhary <- read.table(file.path(.datadir,"bulhary.txt"), header = TRUE, sep = "", colClasses = c("Date", "numeric", "numeric"))
 oracov <- read.table(file.path(.datadir,"oracov.txt"), header = TRUE, sep = "", colClasses = c("Date", "numeric", "numeric"))
+vuv <- read.table(file.path(.datadir_alt,"VUV.txt"), header = TRUE, sep = ";", dec=",", col.names = c("DTM", "Ta", "WV", "WD", "H", "Pyranometr", "E", "P10m", "P1h", "P24h", "Tw"))
 
 # bulhary <- read.table(file.path(.datadir,"Bulhary2.txt"), header = TRUE, sep = ";", col.names = c("DTM", "P10m", "P1h", "P24h"), dec=",", colClasses = c("factor", "numeric", "numeric", "numeric"))
 
-# bulhary$DTM <- as.POSIXct(bulhary$DTM, format = "%d.%m.%Y %H:%M:%OS")
+vuv$DTM <- as.POSIXct(vuv$DTM, format = "%d.%m.%Y %H:%M:%OS")
 
 ```
 
@@ -242,3 +244,92 @@ Teplica
 
 VÚV meteo
 =====================================
+
+
+```{r}
+renderPlotly({
+  
+  vuv.t <- vuv %>% select(Ta, DTM) %>% 
+    mutate(month = month(DTM)) %>% group_by(month) %>% 
+    mutate(
+      Ta10 = quantile(Ta, probs = 0.1), 
+      Ta30 = quantile(Ta, probs = 0.3),
+      Ta50 = quantile(Ta, probs = 0.5),
+      Ta70 = quantile(Ta, probs = 0.7),
+      Ta90 = quantile(Ta, probs = 0.9)) %>% select(-DTM, -Ta)
+  
+  vt <- ggplot(vuv.t)+
+    geom_ribbon(aes(month, ymin=Ta10, ymax=Ta90), fill = 'blue', alpha=0.1)+
+    geom_ribbon(aes(month, ymin=Ta30, ymax=Ta70), fill='red',alpha=0.1)+
+    geom_line(aes(month, Ta50))+
+    theme_minimal()
+  
+  # orac.t
+  
+  ggplotly(vt)
+
+})
+```
+
+Row {.tabset}
+-------------------------------------
+
+### Teplota vody [°C]
+
+```{r}
+renderDygraph({
+  
+  vuv.Tw <- vuv %>% select(Tw, DTM)
+  vuv.Tw <- xts::xts(vuv.Tw, order.by = vuv.Tw$DTM)
+
+  dygraph(vuv.Tw, xlab = "Čas") %>%  
+  dyRangeSelector() %>% 
+  dyCrosshair(direction = "vertical")
+  
+})
+```
+
+### Rychlost větru [m/s]
+
+```{r}
+renderDygraph({
+  
+  vuv.WV <- vuv %>% select(WV, DTM)
+  vuv.WV <- xts::xts(vuv.WV, order.by = vuv.WV$DTM)
+
+  dygraph(vuv.WV, xlab = "Čas") %>%  
+  dyRangeSelector() %>% 
+  dyCrosshair(direction = "vertical")
+  
+})
+```
+
+### Sluneční svit [W/m2]
+
+```{r}
+renderDygraph({
+  
+  vuv.Pyr <- vuv %>% select(Pyranometr, DTM)
+  vuv.Pyr <- xts::xts(vuv.Pyr, order.by = vuv.Pyr$DTM)
+
+  dygraph(vuv.Pyr, xlab = "Čas") %>%  
+  dyRangeSelector() %>% 
+  dyCrosshair(direction = "vertical")
+  
+})
+```
+
+### Vlhkost vzduchu ve 2m [%R.v.]
+
+```{r}
+renderDygraph({
+  
+  vuv.H <- vuv %>% select(H, DTM)
+  vuv.H <- xts::xts(vuv.H, order.by = vuv.H$DTM)
+
+  dygraph(vuv.H, xlab = "Čas") %>%  
+  dyRangeSelector() %>% 
+  dyCrosshair(direction = "vertical")
+  
+})
+```
