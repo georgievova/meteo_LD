@@ -1,0 +1,244 @@
+---
+title: "Stanice"
+output: 
+  flexdashboard::flex_dashboard:
+    theme: bootstrap
+    orientation: rows
+    vertical_layout: fill
+    css: 'styles.css'
+runtime: shiny
+---
+
+```{r global, include=FALSE}
+rm(list = ls())
+library(shiny)
+library(flexdashboard)
+library(dplyr)
+library(dygraphs)
+library(ggplot2)
+library(plotly)
+library(data.table)
+
+.datadir <- "C:\\Users\\Georgievova\\Documents\\stanice_data\\dlouhodb"
+# .datadir <- "C:\\Users\\Georgievova\\Documents\\stanice_data\\libor_d_new"
+
+bulhary <- read.table(file.path(.datadir,"bulhary.txt"), header = TRUE, sep = "", colClasses = c("Date", "numeric", "numeric"))
+oracov <- read.table(file.path(.datadir,"oracov.txt"), header = TRUE, sep = "", colClasses = c("Date", "numeric", "numeric"))
+
+# bulhary <- read.table(file.path(.datadir,"Bulhary2.txt"), header = TRUE, sep = ";", col.names = c("DTM", "P10m", "P1h", "P24h"), dec=",", colClasses = c("factor", "numeric", "numeric", "numeric"))
+
+# bulhary$DTM <- as.POSIXct(bulhary$DTM, format = "%d.%m.%Y %H:%M:%OS")
+
+```
+
+Baštýnský potok
+===================================== 
+
+Bulhary
+===================================== 
+
+Row 
+-------------------------------------
+
+```{r}
+renderPlotly({
+  
+  # bulhary.t <- bulhary %>% select(TMP, DTM) %>% mutate(lwr = TMP-abs(TMP*0.5), uppr = TMP+abs(TMP*0.5))
+  
+  bulhary.t <- bulhary %>% select(TMP, DTM) %>% 
+    mutate(month = month(DTM)) %>% group_by(month) %>% 
+    mutate(
+      TMP10 = quantile(TMP, probs = 0.1), 
+      TMP30 = quantile(TMP, probs = 0.3),
+      TMP50 = quantile(TMP, probs = 0.5),
+      TMP70 = quantile(TMP, probs = 0.7),
+      TMP90 = quantile(TMP, probs = 0.9)) %>% select(-DTM, -TMP)
+  
+  bul.t <- ggplot(bulhary.t)+
+    geom_ribbon(aes(month, ymin=TMP10, ymax=TMP90), fill = 'blue', alpha=0.1)+
+    geom_ribbon(aes(month, ymin=TMP30, ymax=TMP70), fill='red',alpha=0.1)+
+    geom_line(aes(month, TMP50))+
+    theme_minimal()
+  
+  # bul.t
+  
+  ggplotly(bul.t)
+
+})
+```
+
+
+```{r}
+# renderDygraph({
+#   
+#   bulhary.n <- bulhary %>% select(P, DTM) %>% mutate(lwr10 = P*0.9, upper10 = P*1.1)
+#   test <- bulhary.n[1:500,]
+#   test <- test %>% select(-DTM, lwr10, P, upper10)
+# 
+#   # RangeMin <- min(ts.bilance$P)-0.5
+#   # RangeMax <- max(ts.bilance$P)+0.5
+#   
+#   # ts.bulhary <- xts::xts(bulhary.n, order.by = bulhary.n$DTM)
+#   ts.bulhary <- ts(bulhary.n, start = lubridate::decimal_date(as.Date("1961-01-01")), frequency = 1)
+# 
+#   # test.ts <- xts::xts(test, order.by = test$DTM)
+#   tes.ts <- ts(test, start = lubridate::decimal_date(as.Date("1961-01-01")), frequency = 1)
+#   
+#   dygraph(test.ts, main = "Denní srážky", xlab = "Čas") %>%
+#   dySeries("P") %>% 
+#   dySeries(c("lwr10", "P", "upper10")) %>% 
+# #  dyAxis("y", valueRange = c(RangeMin, RangeMax)) %>%  
+#   dyRangeSelector() %>% 
+#   dyCrosshair(direction = "vertical")
+# })
+
+```
+
+Row 
+-------------------------------------
+
+```{r}
+renderPlotly({
+  
+  # bulhary.p <- bulhary %>% select(P, DTM) %>% mutate(lwr = P-abs(P*0.3), uppr = P+abs(P*0.3))
+  # 
+  # p <- ggplot(bulhary.p, aes(DTM))+
+  #   geom_ribbon(aes(ymin=P*0.7, ymax=P*1.3), fill="red", alpha = 0.6)+
+  #   geom_line(aes(y=P))+theme_minimal()
+  # 
+  # p
+  # 
+  
+  bulhary.p <- bulhary %>% select(P, DTM) %>% 
+    mutate(month = month(DTM)) %>% group_by(month) %>% 
+    mutate(
+      P10 = quantile(P, probs = 0.1), 
+      P20 = quantile(P, probs = 0.2),
+      P30 = quantile(P, probs = 0.3),
+      P40 = quantile(P, probs = 0.4),
+      P50 = quantile(P, probs = 0.5),
+      P60 = quantile(P, probs = 0.6),
+      P70 = quantile(P, probs = 0.7),
+      P80 = quantile(P, probs = 0.8),
+      P90 = quantile(P, probs = 0.9)) %>% select(-DTM, -P)
+  
+  bul.p <- ggplot(bulhary.p)+
+    geom_ribbon(aes(month, ymin=P10, ymax=P90), fill = 'orange', alpha=0.2)+
+    geom_ribbon(aes(month, ymin=P20, ymax=P80), fill='green',alpha=0.2)+
+    geom_ribbon(aes(month, ymin=P30, ymax=P70), fill='blue',alpha=0.2)+
+    geom_ribbon(aes(month, ymin=P40, ymax=P60), fill='red',alpha=0.5)+
+    geom_line(aes(month, P50))+
+    theme_minimal()
+  
+  # bul.p
+  
+  ggplotly(bul.p)
+
+})
+
+```
+
+
+Kojetický potok
+===================================== 
+
+
+Lišany
+===================================== 
+
+
+Merboltický potok
+===================================== 
+
+
+Oráčov
+===================================== 
+
+Row 
+-------------------------------------
+
+```{r}
+renderPlotly({
+  
+  oracov.t <- oracov %>% select(TMP, DTM) %>% 
+    mutate(month = month(DTM)) %>% group_by(month) %>% 
+    mutate(
+      TMP10 = quantile(TMP, probs = 0.1), 
+      TMP30 = quantile(TMP, probs = 0.3),
+      TMP50 = quantile(TMP, probs = 0.5),
+      TMP70 = quantile(TMP, probs = 0.7),
+      TMP90 = quantile(TMP, probs = 0.9)) %>% select(-DTM, -TMP)
+  
+  orac.t <- ggplot(oracov.t)+
+    geom_ribbon(aes(month, ymin=TMP10, ymax=TMP90), fill = 'blue', alpha=0.1)+
+    geom_ribbon(aes(month, ymin=TMP30, ymax=TMP70), fill='red',alpha=0.1)+
+    geom_line(aes(month, TMP50))+
+    theme_minimal()
+  
+  # orac.t
+  
+  ggplotly(orac.t)
+
+})
+```
+
+
+Row 
+-------------------------------------
+
+```{r}
+renderPlotly({
+  
+  oracov.p <- oracov %>% select(P, DTM) %>% 
+    mutate(month = month(DTM)) %>% group_by(month) %>% 
+    mutate(
+      P10 = quantile(P, probs = 0.1), 
+      P20 = quantile(P, probs = 0.2),
+      P30 = quantile(P, probs = 0.3),
+      P40 = quantile(P, probs = 0.4),
+      P50 = quantile(P, probs = 0.5),
+      P60 = quantile(P, probs = 0.6),
+      P70 = quantile(P, probs = 0.7),
+      P80 = quantile(P, probs = 0.8),
+      P90 = quantile(P, probs = 0.9)) %>% select(-DTM, -P)
+  
+  orac.p <- ggplot(oracov.p)+
+    geom_ribbon(aes(month, ymin=P10, ymax=P90), fill = 'orange', alpha=0.2)+
+    geom_ribbon(aes(month, ymin=P20, ymax=P80), fill='green',alpha=0.2)+
+    geom_ribbon(aes(month, ymin=P30, ymax=P70), fill='blue',alpha=0.2)+
+    geom_ribbon(aes(month, ymin=P40, ymax=P60), fill='red',alpha=0.5)+
+    geom_line(aes(month, P50))+
+    theme_minimal()
+  
+  # orac.p
+  
+  ggplotly(orac.p)
+
+})
+
+```
+
+
+Podhora
+===================================== 
+
+Poledník
+===================================== 
+
+Přepeře
+===================================== 
+
+Račinka
+===================================== 
+
+
+Svitavka
+=====================================
+
+
+Teplica
+=====================================
+
+
+VÚV meteo
+=====================================
