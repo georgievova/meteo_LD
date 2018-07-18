@@ -19,22 +19,114 @@ library(ggplot2)
 library(plotly)
 library(data.table)
 
-.datadir <- "C:\\Users\\Georgievova\\Documents\\meteo_LD\\stanice_data\\dlouhodb"
-.datadir_alt <- "C:\\Users\\Georgievova\\Documents\\meteo_LD\\stanice_data\\libor_d_new"
-# .datadir <- "C:\\Users\\Georgievova\\Documents\\stanice_data\\libor_d_new"
+.datadir <- "C:\\Users\\Georgievova\\Documents\\meteo_LD\\stanice_data"
 
-bulhary <- read.table(file.path(.datadir,"bulhary.txt"), header = TRUE, sep = "", colClasses = c("Date", "numeric", "numeric"))
-oracov <- read.table(file.path(.datadir,"oracov.txt"), header = TRUE, sep = "", colClasses = c("Date", "numeric", "numeric"))
-vuv <- read.table(file.path(.datadir_alt,"VUV.txt"), header = TRUE, sep = ";", dec=",", col.names = c("DTM", "Ta", "WV", "WD", "H", "Pyranometr", "E", "P10m", "P1h", "P24h", "Tw"))
+stanice <- readRDS(file.path(.datadir, "denni\\stanice_dm.rds")) 
 
 # bulhary <- read.table(file.path(.datadir,"Bulhary2.txt"), header = TRUE, sep = ";", col.names = c("DTM", "P10m", "P1h", "P24h"), dec=",", colClasses = c("factor", "numeric", "numeric", "numeric"))
+bulhary <- read.table(file.path(.datadir,"dlouhodb\\bulhary.txt"), header = TRUE, sep = "", colClasses = c("Date", "numeric", "numeric"))
+oracov <- read.table(file.path(.datadir,"dlouhodb\\oracov.txt"), header = TRUE, sep = "", colClasses = c("Date", "numeric", "numeric"))
 
+#prejmenuj dle zkr_seznam!!
+vuv <- read.table(file.path(.datadir,"libor_d_new\\VUV.txt"), header = TRUE, sep = ";", dec=",", col.names = c("DTM", "Ta", "WV", "WD", "H", "Pyranometr", "E", "P10m", "P1h", "P24h", "Tw"))
 vuv$DTM <- as.POSIXct(vuv$DTM, format = "%d.%m.%Y %H:%M:%OS")
+
+# stanice <- read.table(file.path(.datadir, "meteo_seznam.csv"), header = TRUE, sep = ",")
 
 ```
 
 Baštýnský potok
 ===================================== 
+
+Row {data-height=600}
+-------------------------------------
+
+### Graf1 {data-width=450}
+
+```{r bastynsky: panel}
+
+absolutePanel(class = "panel panel-default", draggable = FALSE,
+              top = "0%", left = '0%', 
+              right = "auto", bottom = 'auto',
+              width = '17%', height = "10",
+              style = "opacity: 0.65; z-index: 10;",
+              # style = "opacity: 1; style = z-index: 400",
+        wellPanel(
+            selectInput("entry.year", label = "Zvolte rok:",
+                        choices = seq(1961,2015,1)),
+            radioButtons("entry.var", label = "Zvolte proměnnou:", 
+                         choices = c("Teplota" = "A",
+                                     "Srážky" = "B"), selected = "B"),
+            
+            conditionalPanel(condition = "input.entry.var == 'A'",
+                             bastynsky <- stanice %>%  filter(ID == "bastynsky") %>% select(-P, -month.P)
+                 ),
+            conditionalPanel(condition = "input.entry.var == 'B'",
+                             bastynsky <- stanice %>%  filter(ID == "bastynsky") %>% select(-TMP, -month.TMP)
+                 )
+            )
+          )
+
+```
+
+```{r bastynsky g1}
+renderPlotly({
+  
+  bastynsky.yt <- bastynsky %>% filter(year(DTM) == input$entry.year)
+  
+  bastynsky.t <- bastynsky %>% select(TMP, DTM, month) %>% group_by(month) %>% 
+    mutate(
+      TMP10 = quantile(TMP, probs = 0.1), 
+      TMP30 = quantile(TMP, probs = 0.3),
+      TMP50 = quantile(TMP, probs = 0.5),
+      TMP70 = quantile(TMP, probs = 0.7),
+      TMP90 = quantile(TMP, probs = 0.9)) %>% select(-DTM, -TMP) %>% ungroup
+  
+  bas.t <- ggplot()+
+    geom_line(data = bastynsky.yt, aes(DTM, TMP), color = "red")+
+    geom_ribbon(data = bastynsky.t, aes(month, ymin=TMP10, ymax=TMP90), fill = 'blue', alpha=0.1)+
+    geom_ribbon(data = bastynsky.t, aes(month, ymin=TMP30, ymax=TMP70), fill='red',alpha=0.1)+
+    geom_line(data = bastynsky.t, aes(month, TMP50))+
+    theme_minimal()+
+    scale_x_continuous(breaks=c(1:12))
+    # scale_x_continuous(sec.axis = sec_axis(trans = ~.*30, breaks=c(1:12)))
+  
+  
+  ggplot()+
+    geom_line(data = bastynsky.yt, aes(DTM, TMP), color = "red")+
+    scale_x_date(name = "Month", breaks = c(1:12))+
+    geom_ribbon(data = bastynsky.t, aes(month, ymin=TMP10, ymax=TMP90), fill = 'blue', alpha=0.1)+
+    geom_ribbon(data = bastynsky.t, aes(month, ymin=TMP30, ymax=TMP70), fill='red',alpha=0.1)+
+    geom_line(data = bastynsky.t, aes(month, TMP50))+
+    theme_minimal()
+  
+    
+    ggplot()+
+    geom_ribbon(data = bastynsky.t, aes(month, ymin=TMP10, ymax=TMP90), fill = 'blue', alpha=0.1)+
+    geom_ribbon(data = bastynsky.t, aes(month, ymin=TMP30, ymax=TMP70), fill='red',alpha=0.1)+
+    geom_line(data = bastynsky.t, aes(month, TMP50))+
+    theme_minimal()+
+    scale_x_continuous(breaks=c(1:12))
+  
+})
+```
+
+
+Row {data-height=400}
+-------------------------------------
+
+### Graf2 {data-width=500}
+
+```{r}
+bastynsky.g2 <- bastynsky %>% filter(year(DTM) == input$entry.year) %>% select(TMP, month) %>% mutate(cumsum.TMP = cumsum(TMP)) %>% ungroup() %>% arrange(cumsum.TMP)
+
+ggplot(bastynsky.g2, aes(month, cumsum.TMP)) + geom_line()+
+    scale_x_continuous(breaks=c(1:12))
+```
+
+
+### Graf3 {data-width=500}
+
 
 Bulhary
 ===================================== 
@@ -60,7 +152,8 @@ renderPlotly({
     geom_ribbon(aes(month, ymin=TMP10, ymax=TMP90), fill = 'blue', alpha=0.1)+
     geom_ribbon(aes(month, ymin=TMP30, ymax=TMP70), fill='red',alpha=0.1)+
     geom_line(aes(month, TMP50))+
-    theme_minimal()
+    theme_minimal()+
+    scale_x_continuous(breaks=c(1:12))
   
   # bul.t
   
@@ -130,7 +223,8 @@ renderPlotly({
     geom_ribbon(aes(month, ymin=P30, ymax=P70), fill='blue',alpha=0.2)+
     geom_ribbon(aes(month, ymin=P40, ymax=P60), fill='red',alpha=0.5)+
     geom_line(aes(month, P50))+
-    theme_minimal()
+    theme_minimal()+
+    scale_x_continuous(breaks=c(1:12))
   
   # bul.p
   
@@ -143,6 +237,10 @@ renderPlotly({
 
 Kojetický potok
 ===================================== 
+
+```{r}
+
+```
 
 
 Lišany
@@ -175,7 +273,8 @@ renderPlotly({
     geom_ribbon(aes(month, ymin=TMP10, ymax=TMP90), fill = 'blue', alpha=0.1)+
     geom_ribbon(aes(month, ymin=TMP30, ymax=TMP70), fill='red',alpha=0.1)+
     geom_line(aes(month, TMP50))+
-    theme_minimal()
+    theme_minimal()+
+    scale_x_continuous(breaks=c(1:12))
   
   # orac.t
   
@@ -210,7 +309,8 @@ renderPlotly({
     geom_ribbon(aes(month, ymin=P30, ymax=P70), fill='blue',alpha=0.2)+
     geom_ribbon(aes(month, ymin=P40, ymax=P60), fill='red',alpha=0.5)+
     geom_line(aes(month, P50))+
-    theme_minimal()
+    theme_minimal()+
+    scale_x_continuous(breaks=c(1:12))
   
   # orac.p
   
@@ -245,6 +345,8 @@ Teplica
 VÚV meteo
 =====================================
 
+Row {data-hight=500}
+-------------------------------------
 
 ```{r}
 renderPlotly({
@@ -262,7 +364,8 @@ renderPlotly({
     geom_ribbon(aes(month, ymin=Ta10, ymax=Ta90), fill = 'blue', alpha=0.1)+
     geom_ribbon(aes(month, ymin=Ta30, ymax=Ta70), fill='red',alpha=0.1)+
     geom_line(aes(month, Ta50))+
-    theme_minimal()
+    theme_minimal()+
+    scale_x_continuous(breaks=c(1:12))
   
   # orac.t
   
@@ -271,7 +374,7 @@ renderPlotly({
 })
 ```
 
-Row {.tabset}
+Row {.tabset data-hight=500}
 -------------------------------------
 
 ### Teplota vody [°C]
