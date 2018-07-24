@@ -22,24 +22,20 @@ library(data.table)
 #install.packages('bit64')
 
 .datadir <- "C:\\Users\\Georgievova\\Documents\\meteo_LD\\stanice_data"
-tfrom <- format((as.Date(format(Sys.time(), "%Y%m%d%H%M"), format = "%Y%m%d%H%M")-30), format = "%Y%m%d%H%M")
 
-zkr <- read.table(file.path(.datadir, "zkr_seznam.txt"), header = TRUE, sep = " ")
-
+#denni a mesicni data
 stanice <- readRDS(file.path(.datadir, "denni\\stanice_dm.rds")) 
 
-stanice_updt <- fread(paste0("http://meteo.libordanes.cz/d/d.aspx?usr=po&pwd=pojist%2B1&id=23&tfrom=", tfrom, "&tto=", format(Sys.time(), "%Y%m%d%H%M")),
-                         header = FALSE, sep = ",", col.names = c("ID", "SIGNAL_KEY", "DTM", "value"), colClasses = c("character", "factor", "POSIXct", "numeric"))
-stanice_updt$DTM <- as.POSIXct(stanice_updt$DTM, format = "%Y%m%d%H%M")
-stanice_updt <- merge(stanice_updt, zkr, by = "SIGNAL_KEY")
-stanice_updt <- stanice_updt %>% filter(!ID %in% c("VURV Oldrichov", "Bulhary1", "Bulhary2", "Bulhary3"))
+#data za poslednich 30 dni
+stanice_updt <- readRDS(file.path(.datadir, "libor_d_new\\stanice_updt24072018.rds")) #paste0("libor_d_new\\stanice_updt", format(Sys.time(), "%d%m%Y"), ".rds")
 
-choices.var <- unique(stanice_updt$SIGNAL_KEY)
+choices.var <- as.character(unique(stanice_updt$SIGNAL_KEY))
 names(choices.var) <- as.character(unique(stanice_updt$SIG_NAME))
 
-# bulhary <- read.table(file.path(.datadir,"Bulhary2.txt"), header = TRUE, sep = ";", col.names = c("DTM", "P10m", "P1h", "P24h"), dec=",", colClasses = c("factor", "numeric", "numeric", "numeric"))
-bulhary <- read.table(file.path(.datadir,"dlouhodb\\bulhary.txt"), header = TRUE, sep = "", colClasses = c("Date", "numeric", "numeric"))
-oracov <- read.table(file.path(.datadir,"dlouhodb\\oracov.txt"), header = TRUE, sep = "", colClasses = c("Date", "numeric", "numeric"))
+#dlouhodobe data - bulhary/oracov
+
+# bulhary <- read.table(file.path(.datadir,"dlouhodb\\bulhary.txt"), header = TRUE, sep = "", colClasses = c("Date", "numeric", "numeric"))
+# oracov <- read.table(file.path(.datadir,"dlouhodb\\oracov.txt"), header = TRUE, sep = "", colClasses = c("Date", "numeric", "numeric"))
 
 #prejmenuj dle zkr_seznam!!
 vuv <- read.table(file.path(.datadir,"libor_d_new\\VUV.txt"), header = TRUE, sep = ";", dec=",", col.names = c("DTM", "T", "V", "S", "R", "Y", "H1", "SRA10M", "SRA1H", "SRA24H", "TH"))
@@ -68,15 +64,13 @@ bastynsky <- reactive({
 
 ```
 
-Row {data-height=500}
+Row
 -------------------------------------
-
-### Graf1 {data-width=450}
 
 ```{r bastynsky: panel}
 
 absolutePanel(class = "panel panel-default", draggable = FALSE,
-              top = "0%", left = '0%', 
+              top = "5%", left = '1%', 
               right = "auto", bottom = 'auto',
               width = '17%', height = "10",
               style = "opacity: 0.8; z-index: 10;",
@@ -85,20 +79,26 @@ absolutePanel(class = "panel panel-default", draggable = FALSE,
           radioButtons("entry.var", label = "Zvolte proměnnou:", 
                        choices = c("Teplota" = "TMP",
                                    "Srážky" = "P"), selected = "TMP"),
-          selectInput("entry.year", label = "Zvolte rok:",
-                      choices = seq(1961,2015,1))
+          selectizeInput("entry.year", label = "Zadejte roky:",
+                           choices = seq(1961,2015,1), multiple = TRUE, selected = 1961, size = 55
+                           )
+          # selectInput("entry.year", label = "Zvolte rok:",
+          #             choices = seq(1961,2015,1))
           )
 )
 
 ```
 
 
-```{r bastynsky: g1}
+```{r bastynsky: graf1}
 renderPlotly({
   
   bastynsky <- bastynsky()
   
-  bastynsky.yt <- bastynsky %>% filter(year(DTM) == input$entry.year) #%>% group_by(month) %>% summarise(month.val=mean(month.val))
+  bastynsky.yt <- bastynsky %>% mutate(year = year(DTM)) %>% filter(year %in% input$entry.year) %>% 
+                  group_by(year) %>% mutate(month = seq(1,12,11/(n()-1)))
+  
+  # bastynsky.yt$month <- seq(1,12,11/(nrow(bastynsky.yt)-1))
   
   bastynsky.t <- bastynsky %>% select(value, DTM, month) %>% group_by(month) %>% 
     mutate(
@@ -112,13 +112,10 @@ renderPlotly({
       Q80 = quantile(value, probs = 0.8), 
       Q90 = quantile(value, probs = 0.9)) %>% select(-DTM, -value) %>% ungroup
   
+  
   bas.t <-
     ggplot()+
-    # geom_line(data = bastynsky.yt, aes(DTM, value), color="red")+
-    # scale_x_continuous(breaks=/12)
-    # 
-    # ggplot()+
-    # geom_line(data = bastynsky.yt, aes(month, month.val), color = "red")+
+    geom_line(data = bastynsky.yt, aes(month, value, group = year, color=factor(year)), alpha = 0.95)+
     geom_ribbon(data = bastynsky.t, aes(month, ymin=Q10, ymax=Q90), fill = 'orange', alpha=0.2)+
     geom_ribbon(data = bastynsky.t, aes(month, ymin=Q20, ymax=Q80), fill = 'green', alpha=0.2)+
     geom_ribbon(data = bastynsky.t, aes(month, ymin=Q30, ymax=Q70), fill = 'blue', alpha=0.2)+
@@ -126,26 +123,8 @@ renderPlotly({
     geom_line(data = bastynsky.t, aes(month, Q50))+
     theme_minimal()+
     scale_x_continuous(breaks=c(1:12))
-    # scale_x_continuous(sec.axis = sec_axis(trans = ~.*30, breaks=c(1:12)))
+  # +ylim(min(bastynsky$value), max(bastynsky$value))
 
-  
-  # 
-  # 
-  # ggplot()+
-  #   geom_line(data = bastynsky.yt, aes(DTM, TMP), color = "red")+
-  #   scale_x_date(name = "Month", breaks = c(1:12))+
-  #   geom_ribbon(data = bastynsky.t, aes(month, ymin=TMP10, ymax=TMP90), fill = 'blue', alpha=0.1)+
-  #   geom_ribbon(data = bastynsky.t, aes(month, ymin=TMP30, ymax=TMP70), fill='red',alpha=0.1)+
-  #   geom_line(data = bastynsky.t, aes(month, TMP50))+
-  #   theme_minimal()
-  # 
-  #   
-  #   ggplot()+
-  #   geom_ribbon(data = bastynsky.t, aes(month, ymin=TMP10, ymax=TMP90), fill = 'blue', alpha=0.1)+
-  #   geom_ribbon(data = bastynsky.t, aes(month, ymin=TMP30, ymax=TMP70), fill='red',alpha=0.1)+
-  #   geom_line(data = bastynsky.t, aes(month, TMP50))+
-  #   theme_minimal()+
-  #   scale_x_continuous(breaks=c(1:12))
   
   ggplotly(bas.t)
   
@@ -153,35 +132,17 @@ renderPlotly({
 ```
 
 
-Row {data-height=500}
+Row 
 -------------------------------------
 
-### Graf2 {data-width=500}
 
-```{r bastynsky g2 panel}
-
-absolutePanel(class = "panel panel-default", draggable = FALSE,
-              top = "0%", left = '0%', 
-              right = "auto", bottom = 'auto',
-              width = '20%', height = "10",
-              style = "opacity: 0.8; z-index: 10;",
-        wellPanel(
-            selectizeInput("years", label = "Zadejte roky:",
-                           choices = seq(1961,2015,1), multiple = TRUE, selected = 1961, size = 55
-                           )
-            )
-          )
-
-```
-
-
-```{r bastynsky g2}
+```{r bastynsky: graf2}
 renderPlotly({
-bastynsky <- bastynsky()
-
+  
+bastynsky <- stanice %>%  filter(ID == "bastynsky") %>% select(-TMP, -month.TMP, value = P, month.val = month.P)
 # bastynsky.g2a <- bastynsky %>% mutate(year = year(DTM)) %>% group_by(year) %>% mutate(mean.h = mean(abs(month.val))) %>% mutate(cumsum.h = cumsum(abs(mean.h)))
 
-bastynsky.g2 <- bastynsky %>% mutate(year = year(DTM)) %>% filter(year == c(input$years)) %>% group_by(year) %>% select(month.val, month, year) %>% mutate(cumsum.val = cumsum(abs(month.val)))
+bastynsky.g2 <- bastynsky %>% mutate(year = year(DTM)) %>% filter(year %in% input$entry.year) %>% group_by(year) %>% select(month.val, month, year) %>% mutate(cumsum.val = cumsum(abs(month.val)))
 
 bas.t2 <- ggplot() + 
   # geom_line(data = bastynsky.g2a, aes(month, cumsum.h))+
@@ -198,128 +159,205 @@ ggplotly(bas.t2)
 Bulhary
 ===================================== 
 
-Row 
+```{r bulhary: reactions}
+
+bulhary <- reactive({
+
+  if(input$entry.var2 == 'P'){
+    bulhary <- stanice[stanice$ID == "bulhary",]  %>% select(-TMP, -month.TMP, value = P, month.val = month.P)
+    # bastynsky.var <- stanice %>%  filter(ID == "bastynsky") %>% select(-P, -month.P)
+  }else{
+    bulhary <- stanice[stanice$ID == "bulhary",] %>% select(-P, -month.P, value = TMP, month.val = month.TMP)
+    }
+  
+  return(bulhary)
+})
+
+```
+
+Row
 -------------------------------------
 
-```{r}
+```{r bulhary: panel}
+
+absolutePanel(class = "panel panel-default", draggable = FALSE,
+              top = "5%", left = '1%', 
+              right = "auto", bottom = 'auto',
+              width = '17%', height = "10",
+              style = "opacity: 0.8; z-index: 10;",
+              # style = "opacity: 1; style = z-index: 400",
+        wellPanel(
+          radioButtons("entry.var2", label = "Zvolte proměnnou:", 
+                       choices = c("Teplota" = "TMP",
+                                   "Srážky" = "P"), selected = "TMP"),
+          selectizeInput("entry.year2", label = "Zadejte roky:",
+                           choices = seq(1961,2015,1), multiple = TRUE, selected = 1961, size = 55
+                           )
+          # selectInput("entry.year", label = "Zvolte rok:",
+          #             choices = seq(1961,2015,1))
+          )
+)
+
+```
+
+
+```{r bulhary: graf1}
 renderPlotly({
   
-  # bulhary.t <- bulhary %>% select(TMP, DTM) %>% mutate(lwr = TMP-abs(TMP*0.5), uppr = TMP+abs(TMP*0.5))
+  bulhary <- bulhary()
   
-  bulhary.t <- bulhary %>% select(TMP, DTM) %>% 
-    mutate(month = month(DTM)) %>% group_by(month) %>% 
+  bulhary.yt <- bulhary %>% mutate(year = year(DTM)) %>% filter(year %in% input$entry.year2) %>% 
+                  group_by(year) %>% mutate(month = seq(1,12,11/(n()-1)))
+  
+  # bastynsky.yt$month <- seq(1,12,11/(nrow(bastynsky.yt)-1))
+  
+  bulhary.t <- bulhary %>% select(value, DTM, month) %>% group_by(month) %>% 
     mutate(
-      TMP10 = quantile(TMP, probs = 0.1), 
-      TMP30 = quantile(TMP, probs = 0.3),
-      TMP50 = quantile(TMP, probs = 0.5),
-      TMP70 = quantile(TMP, probs = 0.7),
-      TMP90 = quantile(TMP, probs = 0.9)) %>% select(-DTM, -TMP)
+      Q10 = quantile(value, probs = 0.1), 
+      Q20 = quantile(value, probs = 0.2), 
+      Q30 = quantile(value, probs = 0.3),
+      Q40 = quantile(value, probs = 0.4), 
+      Q50 = quantile(value, probs = 0.5),
+      Q60 = quantile(value, probs = 0.6), 
+      Q70 = quantile(value, probs = 0.7),
+      Q80 = quantile(value, probs = 0.8), 
+      Q90 = quantile(value, probs = 0.9)) %>% select(-DTM, -value) %>% ungroup
   
-  bul.t <- ggplot(bulhary.t)+
-    geom_ribbon(aes(month, ymin=TMP10, ymax=TMP90), fill = 'blue', alpha=0.1)+
-    geom_ribbon(aes(month, ymin=TMP30, ymax=TMP70), fill='red',alpha=0.1)+
-    geom_line(aes(month, TMP50))+
+  
+  bul.t <-
+    ggplot()+
+    geom_line(data = bulhary.yt, aes(month, value, group = year, color=factor(year)), alpha = 0.95)+
+    geom_ribbon(data = bulhary.t, aes(month, ymin=Q10, ymax=Q90), fill = 'orange', alpha=0.2)+
+    geom_ribbon(data = bulhary.t, aes(month, ymin=Q20, ymax=Q80), fill = 'green', alpha=0.2)+
+    geom_ribbon(data = bulhary.t, aes(month, ymin=Q30, ymax=Q70), fill = 'blue', alpha=0.2)+
+    geom_ribbon(data = bulhary.t, aes(month, ymin=Q40, ymax=Q60), fill = 'red', alpha=0.5)+
+    geom_line(data = bulhary.t, aes(month, Q50))+
     theme_minimal()+
     scale_x_continuous(breaks=c(1:12))
-  
-  # bul.t
+  # +ylim(min(bulhary$value), max(bulhary$value))
+
   
   ggplotly(bul.t)
-
+  
 })
 ```
 
-
-```{r}
-# renderDygraph({
-#   
-#   bulhary.n <- bulhary %>% select(P, DTM) %>% mutate(lwr10 = P*0.9, upper10 = P*1.1)
-#   test <- bulhary.n[1:500,]
-#   test <- test %>% select(-DTM, lwr10, P, upper10)
-# 
-#   # RangeMin <- min(ts.bilance$P)-0.5
-#   # RangeMax <- max(ts.bilance$P)+0.5
-#   
-#   # ts.bulhary <- xts::xts(bulhary.n, order.by = bulhary.n$DTM)
-#   ts.bulhary <- ts(bulhary.n, start = lubridate::decimal_date(as.Date("1961-01-01")), frequency = 1)
-# 
-#   # test.ts <- xts::xts(test, order.by = test$DTM)
-#   tes.ts <- ts(test, start = lubridate::decimal_date(as.Date("1961-01-01")), frequency = 1)
-#   
-#   dygraph(test.ts, main = "Denní srážky", xlab = "Čas") %>%
-#   dySeries("P") %>% 
-#   dySeries(c("lwr10", "P", "upper10")) %>% 
-# #  dyAxis("y", valueRange = c(RangeMin, RangeMax)) %>%  
-#   dyRangeSelector() %>% 
-#   dyCrosshair(direction = "vertical")
-# })
-
-```
 
 Row 
 -------------------------------------
 
-```{r}
+
+```{r bulhary: graf2}
 renderPlotly({
-  
-  # bulhary.p <- bulhary %>% select(P, DTM) %>% mutate(lwr = P-abs(P*0.3), uppr = P+abs(P*0.3))
-  # 
-  # p <- ggplot(bulhary.p, aes(DTM))+
-  #   geom_ribbon(aes(ymin=P*0.7, ymax=P*1.3), fill="red", alpha = 0.6)+
-  #   geom_line(aes(y=P))+theme_minimal()
-  # 
-  # p
-  # 
-  
-  bulhary.p <- bulhary %>% select(P, DTM) %>% 
-    mutate(month = month(DTM)) %>% group_by(month) %>% 
-    mutate(
-      P10 = quantile(P, probs = 0.1), 
-      P20 = quantile(P, probs = 0.2),
-      P30 = quantile(P, probs = 0.3),
-      P40 = quantile(P, probs = 0.4),
-      P50 = quantile(P, probs = 0.5),
-      P60 = quantile(P, probs = 0.6),
-      P70 = quantile(P, probs = 0.7),
-      P80 = quantile(P, probs = 0.8),
-      P90 = quantile(P, probs = 0.9)) %>% select(-DTM, -P)
-  
-  bul.p <- ggplot(bulhary.p)+
-    geom_ribbon(aes(month, ymin=P10, ymax=P90), fill = 'orange', alpha=0.2)+
-    geom_ribbon(aes(month, ymin=P20, ymax=P80), fill='green',alpha=0.2)+
-    geom_ribbon(aes(month, ymin=P30, ymax=P70), fill='blue',alpha=0.2)+
-    geom_ribbon(aes(month, ymin=P40, ymax=P60), fill='red',alpha=0.5)+
-    geom_line(aes(month, P50))+
-    theme_minimal()+
-    scale_x_continuous(breaks=c(1:12))
-  
-  # bul.p
-  
-  ggplotly(bul.p)
 
+bulhary <- stanice %>%  filter(ID == "bulhary") %>% select(-TMP, -month.TMP, value = P, month.val = month.P)
+  
+bulhary.g <- bulhary %>% mutate(year = year(DTM)) %>% filter(year %in% input$entry.year2) %>% group_by(year) %>% select(month.val, month, year) %>%
+  mutate(cumsum.val = cumsum(abs(month.val)))
+
+bul <- ggplot() + 
+  geom_line(data = bulhary.g, aes(month, cumsum.val, group = year, colour=factor(year)))+
+  scale_x_continuous(breaks=c(1:12))+
+  theme_minimal()+
+  scale_colour_brewer(palette = "Set1", type = "div")
+
+ggplotly(bul) 
 })
-
 ```
 
 
 Kojetický potok
 ===================================== 
 
-```{r}
+```{r kojetice: reactions}
+
+kojetice <- reactive({
+  
+  if(input$entry.var3 == 'P'){
+  kojetice <- stanice %>% filter(ID == "kojetice") %>% select(-TMP, -month.TMP, value = P, month.val = month.P)
+  }else{
+  kojetice <- stanice %>% filter(ID == "kojetice") %>% select(-P, -month.P, value = TMP, month.val = month.TMP)
+  }
+  
+  return(kojetice)
+})
 
 ```
 
+Row 
+-------------------------------------
 
-Lišany
-===================================== 
+### Dlouhodobé údaje
+
+```{r kojetice: panel g1}
+absolutePanel(class = "panel panel-default", draggable = FALSE,
+              top = "0%", left = '0%', 
+              right = "auto", bottom = 'auto',
+              width = '17%', height = "10",
+              style = "opacity: 0.8; z-index: 10;",
+              # style = "opacity: 1; style = z-index: 400",
+        wellPanel(
+          radioButtons("entry.var3", label = "Zvolte proměnnou:", 
+                       choices = c("Teplota" = "TMP",
+                                   "Srážky" = "P"), selected = "TMP"),
+          selectizeInput("entry.year3", label = "Zadejte roky:",
+                           choices = seq(1961,2015,1), multiple = TRUE, selected = 1961, size = 55
+                           )
+          )
+)
+```
 
 
-Merboltický potok
-===================================== 
+```{r kojetice: graf1}
+renderPlotly({
+  
+  kojetice <- kojetice()
+  
+  kojetice.yt <- kojetice %>% mutate(year = year(DTM)) %>% filter(year %in% input$entry.year3) %>% 
+                  group_by(year) %>% mutate(month = seq(1,12,11/(n()-1)))
+  
+  kojetice.t <- kojetice %>% select(value, DTM, month) %>% group_by(month) %>% 
+    mutate(
+      Q10 = quantile(value, probs = 0.1), 
+      Q20 = quantile(value, probs = 0.2), 
+      Q30 = quantile(value, probs = 0.3),
+      Q40 = quantile(value, probs = 0.4), 
+      Q50 = quantile(value, probs = 0.5),
+      Q60 = quantile(value, probs = 0.6), 
+      Q70 = quantile(value, probs = 0.7),
+      Q80 = quantile(value, probs = 0.8), 
+      Q90 = quantile(value, probs = 0.9)) %>% select(-DTM, -value) %>% ungroup
+  
+  
+  kojet <-
+    ggplot()+
+    geom_line(data = kojetice.yt, aes(month, value, group = year, color=factor(year)), alpha = 0.95)+
+    geom_ribbon(data = kojetice.t, aes(month, ymin=Q10, ymax=Q90), fill = 'orange', alpha=0.2)+
+    geom_ribbon(data = kojetice.t, aes(month, ymin=Q20, ymax=Q80), fill = 'green', alpha=0.2)+
+    geom_ribbon(data = kojetice.t, aes(month, ymin=Q30, ymax=Q70), fill = 'blue', alpha=0.2)+
+    geom_ribbon(data = kojetice.t, aes(month, ymin=Q40, ymax=Q60), fill = 'red', alpha=0.5)+
+    geom_line(data = kojetice.t, aes(month, Q50))+
+    theme_minimal()+
+    scale_x_continuous(breaks=c(1:12))
+  # +ylim(min(bastynsky$value), max(bastynsky$value))
 
-### Graf3 {data-width=500}
+  
+  ggplotly(kojet)
+  
+})
+```
 
-```{r merboltice g3 panel}
+Row 
+-------------------------------------
+
+### Data za posledních 30 dní
+
+```{r kojetice: panel g2}
+
+kojetice_updt <- stanice_updt %>% filter(ID == "Kojetice potok")
+
+  choice.kojetice <- as.character(unique(kojetice_updt$SIGNAL_KEY))
+  names(choice.kojetice) <- as.character(unique(kojetice_updt$SIG_NAME))
 
 absolutePanel(class = "panel panel-default", draggable = FALSE,
               top = "0%", left = '0%', 
@@ -327,21 +365,23 @@ absolutePanel(class = "panel panel-default", draggable = FALSE,
               width = '20%', height = "10",
               style = "opacity: 0.8; z-index: 10;",
         wellPanel(
-            selectInput("entry.variable", label = "Zvolte promennou:",
-                           choices = choices.var, selected = "H1")
+            selectInput("entry.var.updt", label = "Zvolte promennou:",
+                           choices = choice.kojetice)
             )
           )
 
 ```
 
-```{r merboltice g3}
+
+```{r kojetice: graf2}
 
 renderDygraph({
-  
-  merboltice.g3 <- stanice_updt %>% filter(SIGNAL_KEY == input$entry.variable, ID == "Merboltice p") %>% select(DTM, value)
-  merboltice.g3 <- xts::xts(merboltice.g3, order.by = merboltice.g3$DTM)
 
-  dygraph(merboltice.g3, xlab = "Čas") %>%  
+  kojetice_updt <- kojetice_updt %>% filter(SIGNAL_KEY == input$entry.var.updt) %>% select(DTM, value)
+  
+  kojetice.g <- xts::xts(kojetice_updt, order.by = kojetice_updt$DTM)
+
+  dygraph(kojetice.g, xlab = "Čas") %>%  
   dyRangeSelector() %>% 
   dyCrosshair(direction = "vertical")
   
@@ -350,35 +390,334 @@ renderDygraph({
 ```
 
 
-Oráčov
+Lišany
 ===================================== 
+
+```{r lisany: reactions}
+
+lisany <- reactive({
+  
+  if(input$entry.var4 == 'P'){
+  lisany <- stanice %>% filter(ID == "lisany") %>% select(-TMP, -month.TMP, value = P, month.val = month.P)
+  }else{
+  lisany <- stanice %>% filter(ID == "lisany") %>% select(-P, -month.P, value = TMP, month.val = month.TMP)
+  }
+  
+  return(lisany)
+})
+
+```
 
 Row 
 -------------------------------------
 
-```{r}
+### Dlouhodobé údaje
+
+```{r lisany: panel g1}
+absolutePanel(class = "panel panel-default", draggable = FALSE,
+              top = "0%", left = '0%', 
+              right = "auto", bottom = 'auto',
+              width = '17%', height = "10",
+              style = "opacity: 0.8; z-index: 10;",
+              # style = "opacity: 1; style = z-index: 400",
+        wellPanel(
+          radioButtons("entry.var4", label = "Zvolte proměnnou:", 
+                       choices = c("Teplota" = "TMP",
+                                   "Srážky" = "P"), selected = "TMP"),
+          selectizeInput("entry.year4", label = "Zadejte roky:",
+                           choices = seq(1961,2015,1), multiple = TRUE, selected = 1961, size = 55
+                           )
+          )
+)
+```
+
+
+```{r lisany: graf1}
 renderPlotly({
   
-  oracov.t <- oracov %>% select(TMP, DTM) %>% 
-    mutate(month = month(DTM)) %>% group_by(month) %>% 
-    mutate(
-      TMP10 = quantile(TMP, probs = 0.1), 
-      TMP30 = quantile(TMP, probs = 0.3),
-      TMP50 = quantile(TMP, probs = 0.5),
-      TMP70 = quantile(TMP, probs = 0.7),
-      TMP90 = quantile(TMP, probs = 0.9)) %>% select(-DTM, -TMP)
+  lisany <- lisany()
   
-  orac.t <- ggplot(oracov.t)+
-    geom_ribbon(aes(month, ymin=TMP10, ymax=TMP90), fill = 'blue', alpha=0.1)+
-    geom_ribbon(aes(month, ymin=TMP30, ymax=TMP70), fill='red',alpha=0.1)+
-    geom_line(aes(month, TMP50))+
+  lisany.yt <- lisany %>% mutate(year = year(DTM)) %>% filter(year %in% input$entry.year4) %>% 
+                  group_by(year) %>% mutate(month = seq(1,12,11/(n()-1)))
+  
+  lisany.t <- lisany %>% select(value, DTM, month) %>% group_by(month) %>% 
+    mutate(
+      Q10 = quantile(value, probs = 0.1), 
+      Q20 = quantile(value, probs = 0.2), 
+      Q30 = quantile(value, probs = 0.3),
+      Q40 = quantile(value, probs = 0.4), 
+      Q50 = quantile(value, probs = 0.5),
+      Q60 = quantile(value, probs = 0.6), 
+      Q70 = quantile(value, probs = 0.7),
+      Q80 = quantile(value, probs = 0.8), 
+      Q90 = quantile(value, probs = 0.9)) %>% select(-DTM, -value) %>% ungroup
+  
+  
+  lsn <-
+    ggplot()+
+    geom_line(data = lisany.yt, aes(month, value, group = year, color=factor(year)), alpha = 0.95)+
+    geom_ribbon(data = lisany.t, aes(month, ymin=Q10, ymax=Q90), fill = 'orange', alpha=0.2)+
+    geom_ribbon(data = lisany.t, aes(month, ymin=Q20, ymax=Q80), fill = 'green', alpha=0.2)+
+    geom_ribbon(data = lisany.t, aes(month, ymin=Q30, ymax=Q70), fill = 'blue', alpha=0.2)+
+    geom_ribbon(data = lisany.t, aes(month, ymin=Q40, ymax=Q60), fill = 'red', alpha=0.5)+
+    geom_line(data = lisany.t, aes(month, Q50))+
     theme_minimal()+
     scale_x_continuous(breaks=c(1:12))
-  
-  # orac.t
-  
-  ggplotly(orac.t)
+  # +ylim(min(bastynsky$value), max(bastynsky$value))
 
+  
+  ggplotly(lsn)
+  
+})
+```
+
+Row 
+-------------------------------------
+
+### Data za posledních 30 dní
+
+```{r lisany: panel g2}
+
+lisany_updt <- stanice_updt %>% filter(ID == "Lisany")
+
+  choice.lisany <- as.character(unique(lisany_updt$SIGNAL_KEY))
+  names(choice.lisany) <- as.character(unique(lisany_updt$SIG_NAME))
+
+absolutePanel(class = "panel panel-default", draggable = FALSE,
+              top = "0%", left = '0%', 
+              right = "auto", bottom = 'auto',
+              width = '20%', height = "10",
+              style = "opacity: 0.8; z-index: 10;",
+        wellPanel(
+            selectInput("entry.var.updt2", label = "Zvolte promennou:",
+                           choices = choice.lisany)
+            )
+          )
+
+```
+
+
+```{r lisany: graf2}
+
+renderDygraph({
+
+  lisany_updt <- lisany_updt %>% filter(SIGNAL_KEY == input$entry.var.updt2) %>% select(DTM, value)
+  
+  lisany.g <- xts::xts(lisany_updt, order.by = lisany_updt$DTM)
+
+  dygraph(lisany.g, xlab = "Čas") %>%  
+  dyRangeSelector() %>% 
+  dyCrosshair(direction = "vertical")
+  
+})
+
+```
+
+
+Merboltický potok
+===================================== 
+
+```{r merboltice: reactions}
+
+merboltice <- reactive({
+  
+  if(input$entry.var5 == 'P'){
+  merboltice <- stanice %>% filter(ID == "merboltice") %>% select(-TMP, -month.TMP, value = P, month.val = month.P)
+  }else{
+  merboltice <- stanice %>% filter(ID == "merboltice") %>% select(-P, -month.P, value = TMP, month.val = month.TMP)
+  }
+  
+  return(merboltice)
+})
+
+```
+
+Row 
+-------------------------------------
+
+### Dlouhodobé údaje
+
+```{r merboltice: panel g1}
+absolutePanel(class = "panel panel-default", draggable = FALSE,
+              top = "0%", left = '0%', 
+              right = "auto", bottom = 'auto',
+              width = '17%', height = "10",
+              style = "opacity: 0.8; z-index: 10;",
+              # style = "opacity: 1; style = z-index: 400",
+        wellPanel(
+          radioButtons("entry.var5", label = "Zvolte proměnnou:", 
+                       choices = c("Teplota" = "TMP",
+                                   "Srážky" = "P"), selected = "TMP"),
+          selectizeInput("entry.year5", label = "Zadejte roky:",
+                           choices = seq(1961,2015,1), multiple = TRUE, selected = 1961, size = 55
+                           )
+          )
+)
+```
+
+
+```{r merboltice: graf1}
+renderPlotly({
+  
+  merboltice <- merboltice()
+  
+  merboltice.yt <- merboltice %>% mutate(year = year(DTM)) %>% filter(year %in% input$entry.year5) %>% 
+                  group_by(year) %>% mutate(month = seq(1,12,11/(n()-1)))
+  
+  merboltice.t <- merboltice %>% select(value, DTM, month) %>% group_by(month) %>% 
+    mutate(
+      Q10 = quantile(value, probs = 0.1), 
+      Q20 = quantile(value, probs = 0.2), 
+      Q30 = quantile(value, probs = 0.3),
+      Q40 = quantile(value, probs = 0.4), 
+      Q50 = quantile(value, probs = 0.5),
+      Q60 = quantile(value, probs = 0.6), 
+      Q70 = quantile(value, probs = 0.7),
+      Q80 = quantile(value, probs = 0.8), 
+      Q90 = quantile(value, probs = 0.9)) %>% select(-DTM, -value) %>% ungroup
+  
+  
+  mrbltc <-
+    ggplot()+
+    geom_line(data = merboltice.yt, aes(month, value, group = year, color=factor(year)), alpha = 0.95)+
+    geom_ribbon(data = merboltice.t, aes(month, ymin=Q10, ymax=Q90), fill = 'orange', alpha=0.2)+
+    geom_ribbon(data = merboltice.t, aes(month, ymin=Q20, ymax=Q80), fill = 'green', alpha=0.2)+
+    geom_ribbon(data = merboltice.t, aes(month, ymin=Q30, ymax=Q70), fill = 'blue', alpha=0.2)+
+    geom_ribbon(data = merboltice.t, aes(month, ymin=Q40, ymax=Q60), fill = 'red', alpha=0.5)+
+    geom_line(data = merboltice.t, aes(month, Q50))+
+    theme_minimal()+
+    scale_x_continuous(breaks=c(1:12))
+  # +ylim(min(bastynsky$value), max(bastynsky$value))
+
+  
+  ggplotly(mrbltc)
+  
+})
+```
+
+Row 
+-------------------------------------
+
+### Data za posledních 30 dní
+
+```{r merboltice: g2 panel}
+
+merboltice_updt <- stanice_updt %>% filter(ID == "Merboltice p")
+
+  choice.merboltice <- as.character(unique(merboltice_updt$SIGNAL_KEY))
+  names(choice.merboltice) <- as.character(unique(merboltice_updt$SIG_NAME))
+
+absolutePanel(class = "panel panel-default", draggable = FALSE,
+              top = "0%", left = '0%', 
+              right = "auto", bottom = 'auto',
+              width = '20%', height = "10",
+              style = "opacity: 0.8; z-index: 10;",
+        wellPanel(
+            selectInput("entry.var.updt3", label = "Zvolte promennou:",
+                           choices = choice.merboltice)
+            )
+          )
+
+```
+
+```{r merboltice: graf2}
+
+renderDygraph({
+  
+  merboltice_updt <- merboltice_updt %>% filter(SIGNAL_KEY == input$entry.var.updt3) %>% select(DTM, value)
+  merboltice.g <- xts::xts(merboltice_updt, order.by = merboltice_updt$DTM)
+
+  dygraph(merboltice.g, xlab = "Čas") %>%  
+  dyRangeSelector() %>% 
+  dyCrosshair(direction = "vertical")
+  
+})
+
+```
+
+Olešná
+===================================== 
+
+```{r olesna: reactions}
+
+olesna <- reactive({
+
+  if(input$entry.var6 == 'P'){
+    olesna <- stanice[stanice$ID == "olesna",]  %>% select(-TMP, -month.TMP, value = P, month.val = month.P)
+    # bastynsky.var <- stanice %>%  filter(ID == "bastynsky") %>% select(-P, -month.P)
+  }else{
+    olesna <- stanice[stanice$ID == "olesna",] %>% select(-P, -month.P, value = TMP, month.val = month.TMP)
+    }
+  
+  return(olesna)
+})
+
+```
+
+Row
+-------------------------------------
+
+```{r olesna: panel}
+
+absolutePanel(class = "panel panel-default", draggable = FALSE,
+              top = "5%", left = '1%', 
+              right = "auto", bottom = 'auto',
+              width = '17%', height = "10",
+              style = "opacity: 0.8; z-index: 10;",
+              # style = "opacity: 1; style = z-index: 400",
+        wellPanel(
+          radioButtons("entry.var6", label = "Zvolte proměnnou:", 
+                       choices = c("Teplota" = "TMP",
+                                   "Srážky" = "P"), selected = "TMP"),
+          selectizeInput("entry.year6", label = "Zadejte roky:",
+                           choices = seq(1961,2015,1), multiple = TRUE, selected = 1961, size = 55
+                           )
+          # selectInput("entry.year", label = "Zvolte rok:",
+          #             choices = seq(1961,2015,1))
+          )
+)
+
+```
+
+
+```{r olesna: graf1}
+renderPlotly({
+  
+  olesna <- olesna()
+  
+  olesna.yt <- olesna %>% mutate(year = year(DTM)) %>% filter(year %in% input$entry.year6) %>% 
+                  group_by(year) %>% mutate(month = seq(1,12,11/(n()-1)))
+  
+  # bastynsky.yt$month <- seq(1,12,11/(nrow(bastynsky.yt)-1))
+  
+  olesna.t <- olesna %>% select(value, DTM, month) %>% group_by(month) %>% 
+    mutate(
+      Q10 = quantile(value, probs = 0.1), 
+      Q20 = quantile(value, probs = 0.2), 
+      Q30 = quantile(value, probs = 0.3),
+      Q40 = quantile(value, probs = 0.4), 
+      Q50 = quantile(value, probs = 0.5),
+      Q60 = quantile(value, probs = 0.6), 
+      Q70 = quantile(value, probs = 0.7),
+      Q80 = quantile(value, probs = 0.8), 
+      Q90 = quantile(value, probs = 0.9)) %>% select(-DTM, -value) %>% ungroup
+  
+  
+  oles.t <-
+    ggplot()+
+    geom_line(data = olesna.yt, aes(month, value, group = year, color=factor(year)), alpha = 0.95)+
+    geom_ribbon(data = olesna.t, aes(month, ymin=Q10, ymax=Q90), fill = 'orange', alpha=0.2)+
+    geom_ribbon(data = olesna.t, aes(month, ymin=Q20, ymax=Q80), fill = 'green', alpha=0.2)+
+    geom_ribbon(data = olesna.t, aes(month, ymin=Q30, ymax=Q70), fill = 'blue', alpha=0.2)+
+    geom_ribbon(data = olesna.t, aes(month, ymin=Q40, ymax=Q60), fill = 'red', alpha=0.5)+
+    geom_line(data = olesna.t, aes(month, Q50))+
+    theme_minimal()+
+    scale_x_continuous(breaks=c(1:12))
+  # +ylim(min(bulhary$value), max(bulhary$value))
+
+  
+  ggplotly(oles.t)
+  
 })
 ```
 
@@ -386,35 +725,143 @@ renderPlotly({
 Row 
 -------------------------------------
 
-```{r}
+
+```{r olesna: graf2}
+renderPlotly({
+
+olesna <- stanice %>%  filter(ID == "olesna") %>% select(-TMP, -month.TMP, value = P, month.val = month.P)
+  
+olesna.g <- olesna %>% mutate(year = year(DTM)) %>% filter(year %in% input$entry.year6) %>% group_by(year) %>% select(month.val, month, year) %>%
+  mutate(cumsum.val = cumsum(abs(month.val)))
+
+oles <- ggplot() + 
+  geom_line(data = olesna.g, aes(month, cumsum.val, group = year, colour=factor(year)))+
+  scale_x_continuous(breaks=c(1:12))+
+  theme_minimal()+
+  scale_colour_brewer(palette = "Set1", type = "div")
+
+ggplotly(oles) 
+})
+```
+
+Oráčov
+===================================== 
+
+
+```{r oracov: reactions}
+
+oracov <- reactive({
+  
+  if(input$entry.var7 == 'P'){
+  oracov <- stanice %>% filter(ID == "oracov") %>% select(-TMP, -month.TMP, value = P, month.val = month.P)
+  }else{
+  oracov <- stanice %>% filter(ID == "oracov") %>% select(-P, -month.P, value = TMP, month.val = month.TMP)
+  }
+  
+  return(oracov)
+})
+
+```
+
+Row 
+-------------------------------------
+
+### Dlouhodobé údaje
+
+```{r oracov: panel g1}
+absolutePanel(class = "panel panel-default", draggable = FALSE,
+              top = "0%", left = '0%', 
+              right = "auto", bottom = 'auto',
+              width = '17%', height = "10",
+              style = "opacity: 0.8; z-index: 10;",
+              # style = "opacity: 1; style = z-index: 400",
+        wellPanel(
+          radioButtons("entry.var7", label = "Zvolte proměnnou:", 
+                       choices = c("Teplota" = "TMP",
+                                   "Srážky" = "P"), selected = "TMP"),
+          selectizeInput("entry.year7", label = "Zadejte roky:",
+                           choices = seq(1961,2015,1), multiple = TRUE, selected = 1961, size = 55
+                           )
+          )
+)
+```
+
+
+```{r oracov: graf1}
 renderPlotly({
   
-  oracov.p <- oracov %>% select(P, DTM) %>% 
-    mutate(month = month(DTM)) %>% group_by(month) %>% 
-    mutate(
-      P10 = quantile(P, probs = 0.1), 
-      P20 = quantile(P, probs = 0.2),
-      P30 = quantile(P, probs = 0.3),
-      P40 = quantile(P, probs = 0.4),
-      P50 = quantile(P, probs = 0.5),
-      P60 = quantile(P, probs = 0.6),
-      P70 = quantile(P, probs = 0.7),
-      P80 = quantile(P, probs = 0.8),
-      P90 = quantile(P, probs = 0.9)) %>% select(-DTM, -P)
+  oracov <- oracov()
   
-  orac.p <- ggplot(oracov.p)+
-    geom_ribbon(aes(month, ymin=P10, ymax=P90), fill = 'orange', alpha=0.2)+
-    geom_ribbon(aes(month, ymin=P20, ymax=P80), fill='green',alpha=0.2)+
-    geom_ribbon(aes(month, ymin=P30, ymax=P70), fill='blue',alpha=0.2)+
-    geom_ribbon(aes(month, ymin=P40, ymax=P60), fill='red',alpha=0.5)+
-    geom_line(aes(month, P50))+
+  oracov.yt <- oracov %>% mutate(year = year(DTM)) %>% filter(year %in% input$entry.year7) %>% 
+                  group_by(year) %>% mutate(month = seq(1,12,11/(n()-1)))
+  
+  oracov.t <- oracov %>% select(value, DTM, month) %>% group_by(month) %>% 
+    mutate(
+      Q10 = quantile(value, probs = 0.1), 
+      Q20 = quantile(value, probs = 0.2), 
+      Q30 = quantile(value, probs = 0.3),
+      Q40 = quantile(value, probs = 0.4), 
+      Q50 = quantile(value, probs = 0.5),
+      Q60 = quantile(value, probs = 0.6), 
+      Q70 = quantile(value, probs = 0.7),
+      Q80 = quantile(value, probs = 0.8), 
+      Q90 = quantile(value, probs = 0.9)) %>% select(-DTM, -value) %>% ungroup
+  
+  
+  orac <-
+    ggplot()+
+    geom_line(data = oracov.yt, aes(month, value, group = year, color=factor(year)), alpha = 0.95)+
+    geom_ribbon(data = oracov.t, aes(month, ymin=Q10, ymax=Q90), fill = 'orange', alpha=0.2)+
+    geom_ribbon(data = oracov.t, aes(month, ymin=Q20, ymax=Q80), fill = 'green', alpha=0.2)+
+    geom_ribbon(data = oracov.t, aes(month, ymin=Q30, ymax=Q70), fill = 'blue', alpha=0.2)+
+    geom_ribbon(data = oracov.t, aes(month, ymin=Q40, ymax=Q60), fill = 'red', alpha=0.5)+
+    geom_line(data = oracov.t, aes(month, Q50))+
     theme_minimal()+
     scale_x_continuous(breaks=c(1:12))
-  
-  # orac.p
-  
-  ggplotly(orac.p)
+  # +ylim(min(bastynsky$value), max(bastynsky$value))
 
+  
+  ggplotly(orac)
+  
+})
+```
+
+Row 
+-------------------------------------
+
+### Data za posledních 30 dní
+
+```{r oracov: g2 panel}
+
+oracov_updt <- stanice_updt %>% filter(ID == "Oracov")
+
+  choice.oracov <- as.character(unique(oracov_updt$SIGNAL_KEY))
+  names(choice.oracov) <- as.character(unique(oracov_updt$SIG_NAME))
+
+absolutePanel(class = "panel panel-default", draggable = FALSE,
+              top = "0%", left = '0%', 
+              right = "auto", bottom = 'auto',
+              width = '20%', height = "10",
+              style = "opacity: 0.8; z-index: 10;",
+        wellPanel(
+            selectInput("entry.var.updt4", label = "Zvolte promennou:",
+                           choices = choice.oracov)
+            )
+          )
+
+```
+
+```{r oracov: graf2}
+
+renderDygraph({
+  
+  oracov_updt <- oracov_updt %>% filter(SIGNAL_KEY == input$entry.var.updt4) %>% select(DTM, value)
+  oracov.g <- xts::xts(oracov_updt, order.by = oracov_updt$DTM)
+
+  dygraph(oracov.g, xlab = "Čas") %>%  
+  dyRangeSelector() %>% 
+  dyCrosshair(direction = "vertical")
+  
 })
 
 ```
@@ -423,11 +870,210 @@ renderPlotly({
 Podhora
 ===================================== 
 
-Poledník
+```{r podhora: reactions}
+
+podhora <- reactive({
+  
+  if(input$entry.var8 == 'P'){
+  podhora <- stanice %>% filter(ID == "podhora") %>% select(-TMP, -month.TMP, value = P, month.val = month.P)
+  }else{
+  podhora <- stanice %>% filter(ID == "podhora") %>% select(-P, -month.P, value = TMP, month.val = month.TMP)
+  }
+  
+  return(podhora)
+})
+
+```
+
+Row 
+-------------------------------------
+
+### Dlouhodobé údaje
+
+```{r podhora: panel g1}
+absolutePanel(class = "panel panel-default", draggable = FALSE,
+              top = "0%", left = '0%', 
+              right = "auto", bottom = 'auto',
+              width = '17%', height = "10",
+              style = "opacity: 0.8; z-index: 10;",
+              # style = "opacity: 1; style = z-index: 400",
+        wellPanel(
+          radioButtons("entry.var8", label = "Zvolte proměnnou:", 
+                       choices = c("Teplota" = "TMP",
+                                   "Srážky" = "P"), selected = "TMP"),
+          selectizeInput("entry.year8", label = "Zadejte roky:",
+                           choices = seq(1961,2015,1), multiple = TRUE, selected = 1961, size = 55
+                           )
+          )
+)
+```
+
+
+```{r podhora: graf1}
+renderPlotly({
+  
+  podhora <- podhora()
+  
+  podhora.yt <- podhora %>% mutate(year = year(DTM)) %>% filter(year %in% input$entry.year8) %>% 
+                  group_by(year) %>% mutate(month = seq(1,12,11/(n()-1)))
+  
+  podhora.t <- podhora %>% select(value, DTM, month) %>% group_by(month) %>% 
+    mutate(
+      Q10 = quantile(value, probs = 0.1), 
+      Q20 = quantile(value, probs = 0.2), 
+      Q30 = quantile(value, probs = 0.3),
+      Q40 = quantile(value, probs = 0.4), 
+      Q50 = quantile(value, probs = 0.5),
+      Q60 = quantile(value, probs = 0.6), 
+      Q70 = quantile(value, probs = 0.7),
+      Q80 = quantile(value, probs = 0.8), 
+      Q90 = quantile(value, probs = 0.9)) %>% select(-DTM, -value) %>% ungroup
+  
+  
+  podhor <-
+    ggplot()+
+    geom_line(data = podhora.yt, aes(month, value, group = year, color=factor(year)), alpha = 0.95)+
+    geom_ribbon(data = podhora.t, aes(month, ymin=Q10, ymax=Q90), fill = 'orange', alpha=0.2)+
+    geom_ribbon(data = podhora.t, aes(month, ymin=Q20, ymax=Q80), fill = 'green', alpha=0.2)+
+    geom_ribbon(data = podhora.t, aes(month, ymin=Q30, ymax=Q70), fill = 'blue', alpha=0.2)+
+    geom_ribbon(data = podhora.t, aes(month, ymin=Q40, ymax=Q60), fill = 'red', alpha=0.5)+
+    geom_line(data = podhora.t, aes(month, Q50))+
+    theme_minimal()+
+    scale_x_continuous(breaks=c(1:12))
+  # +ylim(min(bastynsky$value), max(bastynsky$value))
+
+  
+  ggplotly(podhor)
+  
+})
+```
+
+Row 
+-------------------------------------
+
+### Data za posledních 30 dní
+
+```{r podhora: g2 panel}
+
+podhora_updt <- stanice_updt %>% filter(ID == "Podhora")
+
+  choice.podhora <- as.character(unique(podhora_updt$SIGNAL_KEY))
+  names(choice.podhora) <- as.character(unique(podhora_updt$SIG_NAME))
+
+absolutePanel(class = "panel panel-default", draggable = FALSE,
+              top = "0%", left = '0%', 
+              right = "auto", bottom = 'auto',
+              width = '20%', height = "10",
+              style = "opacity: 0.8; z-index: 10;",
+        wellPanel(
+            selectInput("entry.var.updt5", label = "Zvolte promennou:",
+                           choices = choice.podhora)
+            )
+          )
+
+```
+
+```{r podhora: graf2}
+
+renderDygraph({
+  
+  podhora_updt <- podhora_updt %>% filter(SIGNAL_KEY == input$entry.var.updt5) %>% select(DTM, value)
+  podhora.g <- xts::xts(podhora_updt, order.by = podhora_updt$DTM)
+
+  dygraph(podhora.g, xlab = "Čas") %>%  
+  dyRangeSelector() %>% 
+  dyCrosshair(direction = "vertical")
+  
+})
+
+```
+
+Praha
 ===================================== 
 
-Přepeře
-===================================== 
+```{r praha: reactions}
+
+praha <- reactive({
+
+  if(input$entry.var9 == 'P'){
+    olesna <- stanice[stanice$ID == "olesna",]  %>% select(-TMP, -month.TMP, value = P, month.val = month.P)
+    # bastynsky.var <- stanice %>%  filter(ID == "bastynsky") %>% select(-P, -month.P)
+  }else{
+    olesna <- stanice[stanice$ID == "olesna",] %>% select(-P, -month.P, value = TMP, month.val = month.TMP)
+    }
+  
+  return(olesna)
+})
+
+```
+
+Row
+-------------------------------------
+
+```{r olesna: panel}
+
+absolutePanel(class = "panel panel-default", draggable = FALSE,
+              top = "5%", left = '1%', 
+              right = "auto", bottom = 'auto',
+              width = '17%', height = "10",
+              style = "opacity: 0.8; z-index: 10;",
+              # style = "opacity: 1; style = z-index: 400",
+        wellPanel(
+          radioButtons("entry.var9", label = "Zvolte proměnnou:", 
+                       choices = c("Teplota" = "TMP",
+                                   "Srážky" = "P"), selected = "TMP"),
+          selectizeInput("entry.year9", label = "Zadejte roky:",
+                           choices = seq(1961,2015,1), multiple = TRUE, selected = 1961, size = 55
+                           )
+          # selectInput("entry.year", label = "Zvolte rok:",
+          #             choices = seq(1961,2015,1))
+          )
+)
+
+```
+
+
+```{r olesna: graf1}
+renderPlotly({
+  
+  olesna <- olesna()
+  
+  olesna.yt <- olesna %>% mutate(year = year(DTM)) %>% filter(year %in% input$entry.year6) %>% 
+                  group_by(year) %>% mutate(month = seq(1,12,11/(n()-1)))
+  
+  # bastynsky.yt$month <- seq(1,12,11/(nrow(bastynsky.yt)-1))
+  
+  olesna.t <- olesna %>% select(value, DTM, month) %>% group_by(month) %>% 
+    mutate(
+      Q10 = quantile(value, probs = 0.1), 
+      Q20 = quantile(value, probs = 0.2), 
+      Q30 = quantile(value, probs = 0.3),
+      Q40 = quantile(value, probs = 0.4), 
+      Q50 = quantile(value, probs = 0.5),
+      Q60 = quantile(value, probs = 0.6), 
+      Q70 = quantile(value, probs = 0.7),
+      Q80 = quantile(value, probs = 0.8), 
+      Q90 = quantile(value, probs = 0.9)) %>% select(-DTM, -value) %>% ungroup
+  
+  
+  oles.t <-
+    ggplot()+
+    geom_line(data = olesna.yt, aes(month, value, group = year, color=factor(year)), alpha = 0.95)+
+    geom_ribbon(data = olesna.t, aes(month, ymin=Q10, ymax=Q90), fill = 'orange', alpha=0.2)+
+    geom_ribbon(data = olesna.t, aes(month, ymin=Q20, ymax=Q80), fill = 'green', alpha=0.2)+
+    geom_ribbon(data = olesna.t, aes(month, ymin=Q30, ymax=Q70), fill = 'blue', alpha=0.2)+
+    geom_ribbon(data = olesna.t, aes(month, ymin=Q40, ymax=Q60), fill = 'red', alpha=0.5)+
+    geom_line(data = olesna.t, aes(month, Q50))+
+    theme_minimal()+
+    scale_x_continuous(breaks=c(1:12))
+  # +ylim(min(bulhary$value), max(bulhary$value))
+
+  
+  ggplotly(oles.t)
+  
+})
+```
+
 
 Račinka
 ===================================== 
