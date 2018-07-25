@@ -21,7 +21,7 @@ library(data.table)
 
 #install.packages('bit64')
 
-.datadir <- "C:\\Users\\Georgievova\\Documents\\meteo_LD\\stanice_data"
+.datadir <- "s:\\SOUKROMÉ ADRESÁŘE\\Irina\\meteo_LD\\stanice_data"
 
 #denni a mesicni data
 stanice <- readRDS(file.path(.datadir, "denni\\stanice_dm.rds")) 
@@ -731,7 +731,7 @@ renderPlotly({
 olesna <- stanice %>%  filter(ID == "olesna") %>% select(-TMP, -month.TMP, value = P, month.val = month.P)
   
 olesna.g <- olesna %>% mutate(year = year(DTM)) %>% filter(year %in% input$entry.year6) %>% group_by(year) %>% select(month.val, month, year) %>%
-  mutate(cumsum.val = cumsum(abs(month.val)))
+  mutate(cumsum.val = cumsum(month.val))
 
 oles <- ggplot() + 
   geom_line(data = olesna.g, aes(month, cumsum.val, group = year, colour=factor(year)))+
@@ -990,7 +990,7 @@ renderDygraph({
 Praha
 ===================================== 
 
-```{r praha: reactions}
+```{r praha vuv: reactions}
 
 praha <- reactive({
 
@@ -1009,10 +1009,12 @@ praha <- reactive({
 Row
 -------------------------------------
 
-```{r praha: panel}
+### Dlouhodobé údaje
+
+```{r praha vuv: panel}
 
 absolutePanel(class = "panel panel-default", draggable = FALSE,
-              top = "5%", left = '1%', 
+              top = "1%", left = '1%', 
               right = "auto", bottom = 'auto',
               width = '17%', height = "10",
               style = "opacity: 1; z-index: 100;",
@@ -1032,7 +1034,7 @@ absolutePanel(class = "panel panel-default", draggable = FALSE,
 ```
 
 
-```{r praha: graf1}
+```{r praha vuv: graf1}
 renderPlotly({
   
   praha <- praha()
@@ -1076,23 +1078,42 @@ renderPlotly({
 Row 
 -------------------------------------
 
+### Data za posledních 30 dní
 
-```{r praha: graf2}
-renderPlotly({
+```{r praha vuv: g2 panel}
 
-praha <- stanice %>%  filter(ID == "praha") %>% select(-TMP, -month.TMP, value = P, month.val = month.P)
+vuv_updt <- stanice_updt %>% filter(ID == "VUV meteo")
+
+  choice.vuv <- as.character(unique(vuv_updt$SIGNAL_KEY))
+  names(choice.vuv) <- as.character(unique(vuv_updt$SIG_NAME))
+
+absolutePanel(class = "panel panel-default", draggable = FALSE,
+              top = "0%", left = '0%', 
+              right = "auto", bottom = 'auto',
+              width = '20%', height = "10",
+              style = "opacity: 1; z-index: 100;",
+        wellPanel(
+            selectInput("entry.var.updt9", label = "Zvolte promennou:",
+                           choices = choice.vuv)
+            )
+          )
+
+```
+
+
+```{r praha vuv: graf2}
+
+renderDygraph({
   
-praha.g <- praha %>% mutate(year = year(DTM)) %>% filter(year %in% input$entry.year9) %>% group_by(year) %>% select(month.val, month, year) %>%
-  mutate(cumsum.val = cumsum(abs(month.val)))
+  vuv_updt <- vuv_updt %>% filter(SIGNAL_KEY == input$entry.var.updt9) %>% select(DTM, value)
+  vuv.g <- xts::xts(vuv_updt, order.by = vuv_updt$DTM)
 
-prh <- ggplot() + 
-  geom_line(data = praha.g, aes(month, cumsum.val, group = year, colour=factor(year)))+
-  scale_x_continuous(breaks=c(1:12))+
-  theme_minimal()+
-  scale_colour_brewer(palette = "Set1", type = "div")
-
-ggplotly(prh) 
+  dygraph(vuv.g, xlab = "Čas") %>%  
+  dyRangeSelector() %>% 
+  dyCrosshair(direction = "vertical")
+  
 })
+
 ```
 
 Račinka
@@ -1459,65 +1480,3 @@ renderDygraph({
 
 ```
 
-
-VÚV meteo
-=====================================
-
-```{r vuv: graf1}
-# renderDygraph({
-#   
-#   vuv.t <- vuv %>% select(T, DTM) %>% 
-#     mutate(month = month(DTM)) %>% group_by(month) %>% 
-#     mutate(
-#       T10 = quantile(T, probs = 0.1), 
-#       T30 = quantile(T, probs = 0.3),
-#       T50 = quantile(T, probs = 0.5),
-#       T70 = quantile(T, probs = 0.7),
-#       T90 = quantile(T, probs = 0.9)) %>% select(-DTM, -T)
-#   
-#   vt <- ggplot(vuv.t)+
-#     geom_ribbon(aes(month, ymin=T10, ymax=T90), fill = 'blue', alpha=0.1)+
-#     geom_ribbon(aes(month, ymin=T30, ymax=T70), fill='red',alpha=0.1)+
-#     geom_line(aes(month, T50))+
-#     theme_minimal()+
-#     scale_x_continuous(breaks=c(1:12))
-#   
-# 
-# })
-```
-
-```{r vuv: g2 panel}
-
-vuv_updt <- stanice_updt %>% filter(ID == "VUV meteo")
-
-  choice.vuv <- as.character(unique(vuv_updt$SIGNAL_KEY))
-  names(choice.vuv) <- as.character(unique(vuv_updt$SIG_NAME))
-
-absolutePanel(class = "panel panel-default", draggable = FALSE,
-              top = "0%", left = '0%', 
-              right = "auto", bottom = 'auto',
-              width = '20%', height = "10",
-              style = "opacity: 1; z-index: 100;",
-        wellPanel(
-            selectInput("entry.var.updt9", label = "Zvolte promennou:",
-                           choices = choice.vuv)
-            )
-          )
-
-```
-
-
-```{r vuv: graf2}
-
-renderDygraph({
-  
-  vuv_updt <- vuv_updt %>% filter(SIGNAL_KEY == input$entry.var.updt9) %>% select(DTM, value)
-  vuv.g <- xts::xts(vuv_updt, order.by = vuv_updt$DTM)
-
-  dygraph(vuv.g, xlab = "Čas") %>%  
-  dyRangeSelector() %>% 
-  dyCrosshair(direction = "vertical")
-  
-})
-
-```
