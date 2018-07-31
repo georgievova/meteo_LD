@@ -117,7 +117,7 @@ renderPlotly({
   
   g1 <-
     ggplot()+
-    geom_line(data = dta.yt, aes(month, value, group = year, color=factor(year)), alpha = 0.95)+
+    geom_line(data = dta.yt, aes(month, value, group = year, color=factor(year)), alpha = 0.95)+ #text=sprintf("DTM: %s<br>hodnota: %s", DTM, round(value, 2)),
     geom_ribbon(data = dta.t, aes(month, ymin=Q10, ymax=Q90), fill = 'orange', alpha=0.2)+
     geom_ribbon(data = dta.t, aes(month, ymin=Q20, ymax=Q80), fill = 'green', alpha=0.2)+
     geom_ribbon(data = dta.t, aes(month, ymin=Q30, ymax=Q70), fill = 'blue', alpha=0.2)+
@@ -129,7 +129,7 @@ renderPlotly({
   # +ylim(min(bastynsky$value), max(bastynsky$value))
 
   
-  ggplotly(g1)
+  ggplotly(g1) #, tooltip = "text"
   
 })
 ```
