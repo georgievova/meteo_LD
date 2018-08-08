@@ -18,20 +18,24 @@ library(dygraphs)
 library(ggplot2)
 library(plotly)
 library(data.table)
+# library(tidyr)
 
 #install.packages('bit64')
 
 .datadir <- "s:\\SOUKROMÉ ADRESÁŘE\\Irina\\meteo_LD\\stanice_data"
 
 #denni a mesicni data
-stanice <- readRDS(file.path(.datadir, "denni\\stanice.rds")) 
+# stanice <- readRDS(file.path(.datadir, "denni\\stanice.rds"))
+stanice <- readRDS(file.path(.datadir, "denni\\stanice_2017.rds"))
 
 #data za poslednich 30 dni
-stanice_updt <- readRDS(file.path(.datadir, "libor_d_new\\stanice_updt31072018.rds")) #paste0("libor_d_new\\stanice_updt", format(Sys.time(), "%d%m%Y"), ".rds")
+stanice_updt <- readRDS(file.path(.datadir, "libor_d_new\\stanice_updt.rds")) 
+
+
 
 # ch <- c("Baštýnský potok", "Bulhary", "Olešná")
 # choices.id <- sort(c(unique(stanice_updt$ID), ch))
-choices.id <- sort(unique(stanice_updt$ID))
+choices.id <- sort(unique(stanice$ID))
 ```
 
 ```{r reactions}
@@ -73,7 +77,7 @@ wellPanel(
                        choices = c("Teplota" = "TMP",
                                    "Srážky" = "P"), selected = "TMP"),
   selectizeInput("entry.year", label = "Zadejte roky:",
-                           choices = seq(1961,2015,1), multiple = TRUE, selected = 1961, size = 55
+                           choices = seq(1961,2017,1), multiple = TRUE, selected = 1961, size = 55
                  )
   )
 
@@ -96,13 +100,14 @@ Row
 renderPlotly({
   
   dta <- dta()$stanice
+  ref <- seq(1968, 2010,1)
   
   dta.yt <- dta %>% mutate(year = year(DTM)) %>% filter(year %in% input$entry.year) %>% 
                   group_by(year) %>% mutate(month = seq(1,12,11/(n()-1)))
   
   # bastynsky.yt$month <- seq(1,12,11/(nrow(bastynsky.yt)-1))
   
-  dta.t <- dta %>% select(value, DTM, month) %>% group_by(month) %>% 
+  dta.t <- dta %>% filter(year %in% ref) %>% select(value, DTM, month) %>% group_by(month) %>% 
     mutate(
       Q10 = quantile(value, probs = 0.1), 
       Q20 = quantile(value, probs = 0.2), 
@@ -115,21 +120,39 @@ renderPlotly({
       Q90 = quantile(value, probs = 0.9)) %>% select(-DTM, -value) %>% ungroup
   
   
-  g1 <-
-    ggplot()+
-    geom_line(data = dta.yt, aes(month, value, group = year, color=factor(year)), alpha = 0.95)+ #text=sprintf("DTM: %s<br>hodnota: %s", DTM, round(value, 2)),
-    geom_ribbon(data = dta.t, aes(month, ymin=Q10, ymax=Q90), fill = 'orange', alpha=0.2)+
-    geom_ribbon(data = dta.t, aes(month, ymin=Q20, ymax=Q80), fill = 'green', alpha=0.2)+
-    geom_ribbon(data = dta.t, aes(month, ymin=Q30, ymax=Q70), fill = 'blue', alpha=0.2)+
-    geom_ribbon(data = dta.t, aes(month, ymin=Q40, ymax=Q60), fill = 'red', alpha=0.5)+
-    geom_line(data = dta.t, aes(month, Q50))+
-    theme_minimal()+
-    scale_x_continuous(breaks=c(1:12))+
-    labs(color = "Rok", x = "Měsíce", y = "Hodnota")
-  # +ylim(min(bastynsky$value), max(bastynsky$value))
+dta.long <- dta.t %>% tidyr::gather(Q, value, 2:10)
+  # dta.long <- dta.t %>% melt(dta.t[, c(2:10)])
 
-  
-  ggplotly(g1) #, tooltip = "text"
+dta.long$Q <- ifelse(dta.long$Q %in% c("Q10","Q90"),"Q80",
+                     ifelse(dta.long$Q %in% c("Q20","Q80"),"Q60",
+                            # ifelse(dta.long$Q %in% c("Q50"),"Q50",
+                                   ifelse(dta.long$Q %in% c("Q30","Q70"),"Q40",
+                                          ifelse(dta.long$Q %in% c("Q40","Q60"),"Q20",
+                                                 dta.long$Q))))#)
+
+dta.long <- dta.long %>% group_by(Q,month) %>% summarise(Qmin = min(value), Qmax = max(value))
+
+#dta.q <- dta %>% group_by(month) %>% 
+
+
+g1 <-
+  ggplot()+
+  geom_ribbon(data = dta.long, aes(month, ymin=Qmin, ymax=Qmax, group=factor(Q), fill=factor(Q),
+              text=sprintf("mesic: %s<br>kvantil: %s<br>rozpeti: %s - %s", 
+                           dta.long$month, dta.long$Q, round(dta.long$Qmin,2), round(dta.long$Qmax,2))), alpha=0.2)+
+  geom_line(data = dta.long[dta.long$Q == "Q50",], aes(month,Qmax), alpha=0.5)+
+  geom_line(data = dta.yt, aes(month, value, group = year, color=factor(year),
+                               text=sprintf("DTM: %s<br>hodnota: %s", dta.yt$DTM, round(dta.yt$value,2))),alpha = 0.75)+
+  theme_minimal()+
+  scale_fill_brewer(palette = "Set1", direction = 1, #type = "div",
+                    name = " ")+
+  scale_colour_brewer(palette = "Set1", type = "div", direction = 1, name = " ")+
+  scale_x_continuous(breaks=c(1:12))+
+  labs(color = "Rok", x = "Měsíce", y = "Hodnota")
+# +ylim(min(bastynsky$value), max(bastynsky$value))
+
+
+ggplotly(g1, tooltip = "text") 
   
 })
 ```
@@ -138,7 +161,7 @@ renderPlotly({
 Row {.tabset}
 -----------------------------------------------------------------------
 
-### Data za posledních 30 dní
+### Aktuální měření
 
 ```{r g2}
 
@@ -170,8 +193,9 @@ stanice <- stanice %>%  filter(ID == input$entry.id) %>% select(-TMP, -month.TMP
 stanice.t <- stanice %>% mutate(year = year(DTM)) %>% filter(year %in% input$entry.year) %>% 
                          group_by(year) %>% select(DTM, value, year) %>% mutate(cumsum.val = cumsum(value)) %>% mutate(month = seq(1,12,11/(n()-1)))
 
-st2 <- ggplot() + 
-  geom_line(data = stanice.t, aes(month, cumsum.val, group = year, colour=factor(year), text=sprintf("DTM: %s<br>hodnota: %s", DTM, round(cumsum.val, 2))))+
+st2 <- ggplot(data = stanice.t) + 
+  geom_line(aes(month, cumsum.val, group = year, colour=factor(year), text=sprintf("DTM: %s<br>hodnota: %s", DTM, round(cumsum.val, 2))))+
+  # geom_ribbon(aes(month, ymin = cumsum.val - 10, ymax = cumsum.val +10), alpha = 0.2)+
   theme_minimal()+
   scale_colour_brewer(palette = "Set1", type = "div")+
   scale_x_continuous(breaks=c(1:12))+
