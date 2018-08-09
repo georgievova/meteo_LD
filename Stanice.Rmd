@@ -18,23 +18,58 @@ library(dygraphs)
 library(ggplot2)
 library(plotly)
 library(data.table)
+library(leaflet)
 # library(tidyr)
 
 #install.packages('bit64')
 
+# input <- c()
+# input$entry.id <- "Oráčov"
+# input$entry.var.updt <- "H1"
+# input$entry.year <- c(1988, 2001)
+
 .datadir <- "s:\\SOUKROMÉ ADRESÁŘE\\Irina\\meteo_LD\\stanice_data"
+.drive <- "K:\\Můj disk\\meteo_LD_stanice_h"
 
 #denni a mesicni data
 # stanice <- readRDS(file.path(.datadir, "denni\\stanice.rds"))
+poloha <- readRDS(file.path(.datadir, "shp_stanice.rds"))
+
 stanice <- readRDS(file.path(.datadir, "denni\\stanice_2017.rds"))
 
-#data za poslednich 30 dni
+#data za posledni rok (od ledna 2018)
 stanice_updt <- readRDS(file.path(.datadir, "libor_d_new\\stanice_updt.rds")) 
 
+#aktualni data (12h?)
+list_of_files <- dir(file.path(.drive))
+list_of_files <- list_of_files[!list_of_files == "desktop.ini"]
+i = list_of_files[1]
+dta_actual = c()
 
+for (i in list_of_files){
+  dta = read.table(file.path(.drive, i), header = F, sep = ",", dec = ".",
+                   col.names = c("ID", "SIGNAL_KEY", "DTM", "value"),
+                   colClasses = c("character", "factor", "character", "numeric"))
+  dta_actual = rbind(dta_actual, data.frame(name = i, dta))
+}
 
-# ch <- c("Baštýnský potok", "Bulhary", "Olešná")
-# choices.id <- sort(c(unique(stanice_updt$ID), ch))
+dta_actual$DTM <- as.POSIXct(dta_actual$DTM, tz = "GMT", format = "%Y%m%d%H%M")
+
+zkr <- read.table(file.path(.datadir, "zkr_seznam.txt"), header = TRUE, sep = " ")
+dta_actual <- merge(dta_actual, zkr, by = "SIGNAL_KEY")
+
+st_ <- data.frame(ID = c("VUV meteo", "Kojetice potok", "Racinka", "Oracov", "Lisany",
+                         "Merboltice p", "Svitavka", "Teplica", "Bastynsky p",
+                         "Podhora", "Bulhary1", "Bulhary2", "Bulhary3"),
+                  new = c("VÚV meteo", "Kojetický potok", "Račinka", "Oráčov", "Lišany",
+                          "Merboltický potok", "Svitavka", "Teplice", "Baštýnský potok",
+                          "Podhora", "Bulhary1", "Bulhary2", "Bulhary3"))
+
+dta_actual <- dta_actual %>% left_join(st_, by="ID") %>% filter(!ID %in% c("VURV Oldrichov", "Prepere", "Baštýnský potok")) %>%
+                             select(-name, -ID, ID = new)
+
+rm(dta, st_, zkr)
+
 choices.id <- sort(unique(stanice$ID))
 ```
 
@@ -47,6 +82,8 @@ dta <- reactive({
   stanice_updt <- stanice_updt %>% filter(ID == input$entry.id)
   choices.updt <- as.character(unique(stanice_updt$SIGNAL_KEY))
   names(choices.updt) <- as.character(unique(stanice_updt$SIG_NAME))
+  
+  dta_actual <- dta_actual %>% filter(ID == input$entry.id)
 
   if(input$entry.var == 'P'){
     stanice <- stanice %>% select(-TMP, -month.TMP, value = P, month.val = month.P)
@@ -55,13 +92,27 @@ dta <- reactive({
     stanice <- stanice %>% select(-P, -month.P, value = TMP, month.val = month.TMP)
     }
   
-  return(list(stanice = stanice, stanice_updt = stanice_updt, choices.updt = choices.updt))
+  return(list(stanice = stanice, stanice_updt = stanice_updt, dta_actual = dta_actual, choices.updt = choices.updt))
 })
 
 ```
 
-Column {.sidebar data-width=400}
+Column {.sidebar data-width=450}
 -----------------------------------------------------------------------
+
+```{r mapa}
+wellPanel(renderLeaflet({
+  
+  label.points <- sprintf(
+      "<strong>%s</strong>",
+      poloha$Oznaceni) %>% 
+      lapply(htmltools::HTML)
+  
+  leaflet() %>% addTiles() %>% addCircleMarkers(data = poloha, lng = poloha$coords.x1, lat = poloha$coords.x2, 
+                                            radius = 5.5, color = "black", fillColor = "#800000", weight = 0.5, opacity = 1, 
+                                            fillOpacity = 1, layerId = poloha$Oznaceni, popup = label.points)
+}))
+```
 
 ```{r sidepanel}
 
@@ -102,7 +153,7 @@ renderPlotly({
   dta <- dta()$stanice
   ref <- seq(1968, 2010,1)
   
-  dta.yt <- dta %>% mutate(year = year(DTM)) %>% filter(year %in% input$entry.year) %>% 
+  dta.yt <- dta %>% filter(year %in% input$entry.year) %>% 
                   group_by(year) %>% mutate(month = seq(1,12,11/(n()-1)))
   
   # bastynsky.yt$month <- seq(1,12,11/(nrow(bastynsky.yt)-1))
@@ -121,7 +172,6 @@ renderPlotly({
   
   
 dta.long <- dta.t %>% tidyr::gather(Q, value, 2:10)
-  # dta.long <- dta.t %>% melt(dta.t[, c(2:10)])
 
 dta.long$Q <- ifelse(dta.long$Q %in% c("Q10","Q90"),"Q80",
                      ifelse(dta.long$Q %in% c("Q20","Q80"),"Q60",
@@ -161,7 +211,7 @@ ggplotly(g1, tooltip = "text")
 Row {.tabset}
 -----------------------------------------------------------------------
 
-### Aktuální měření
+### Měření od lednu 2018
 
 ```{r g2}
 
@@ -169,16 +219,48 @@ renderDygraph({
 
   stanice_updt <- dta()$stanice_updt
   stanice_updt <- stanice_updt %>% filter(SIGNAL_KEY == input$entry.var.updt) %>% select(DTM, value)
-  
-  stanice.g <- xts::xts(stanice_updt, order.by = stanice_updt$DTM)
 
-  dygraph(stanice.g, xlab = "Čas") %>%  
+  dta_actual <- dta()$dta_actual
+  dta_actual <- dta_actual %>% filter(SIGNAL_KEY == input$entry.var.updt) %>% select(DTM, value)
+  dta_actual_48 <- dta_actual %>% filter(between(DTM, lubridate::now("GMT") - lubridate::days(2), lubridate::now("GMT")))
+  dta_actual <- dta_actual[!(dta_actual$DTM %in% dta_actual_48$DTM),]
+  
+  dta <- rbind(stanice_updt, dta_actual)
+
+  # stanice.g <- xts::xts(stanice_updt, order.by = stanice_updt$DTM)
+  # actual_12 <- xts::xts(dta_actual_12, order.by = dta_actual_12$DTM)
+  # actual_rest <- xts::xts(dta_actual_rest, order.by = dta_actual_rest$DTM)
+  
+  dta <- xts::xts(dta, order.by = dta$DTM)
+  
+  dygraph(dta, xlab = "Čas") %>%  
+  dyOptions(colors = RColorBrewer::brewer.pal(3, "Set1")) %>% 
   dyRangeSelector() %>% 
   dyCrosshair(direction = "vertical")
   
 })
 
 ```
+
+### Aktuální měření (posledních 48h)
+
+```{r}
+renderDygraph({
+  
+  dta_actual <- dta()$dta_actual
+  dta_actual <- dta_actual %>% filter(SIGNAL_KEY == input$entry.var.updt) %>% select(value, DTM)
+  actual_48 <- dta_actual %>% filter(between(DTM, lubridate::now("GMT") - lubridate::days(2), lubridate::now("GMT")))
+  
+  actual_48 <- xts::xts(actual_48, order.by = actual_48$DTM)
+  
+  dygraph(actual_48, xlab = "Čas") %>%  
+  dyOptions(colors = RColorBrewer::brewer.pal(1, "Set1")) %>% 
+  dyRangeSelector() %>% 
+  dyCrosshair(direction = "vertical")
+  
+})
+```
+
 
 ### Kumulutavní srážky
 
@@ -187,19 +269,29 @@ renderPlotly({
 
 stanice <- stanice %>%  filter(ID == input$entry.id) %>% select(-TMP, -month.TMP, value = P, month.val = month.P)
   
-# stanice.t <- stanice %>% mutate(year = year(DTM)) %>% filter(year %in% input$entry.year) %>% group_by(year) %>% select(month.val, month, year) %>%
+# stanice.t <- stanice %>% filter(year %in% input$entry.year) %>% group_by(year) %>% select(month.val, month, year) %>%
 #   mutate(cumsum.val = cumsum(month.val))
 
-stanice.t <- stanice %>% mutate(year = year(DTM)) %>% filter(year %in% input$entry.year) %>% 
-                         group_by(year) %>% select(DTM, value, year) %>% mutate(cumsum.val = cumsum(value)) %>% mutate(month = seq(1,12,11/(n()-1)))
+stanice.t <- stanice %>% filter(year %in% input$entry.year) %>% 
+                         group_by(year) %>% select(DTM, value, year) %>% mutate(cumsum.val = cumsum(value)) %>% 
+                         mutate(month = seq(1,12,11/(n()-1)))
 
-st2 <- ggplot(data = stanice.t) + 
-  geom_line(aes(month, cumsum.val, group = year, colour=factor(year), text=sprintf("DTM: %s<br>hodnota: %s", DTM, round(cumsum.val, 2))))+
-  # geom_ribbon(aes(month, ymin = cumsum.val - 10, ymax = cumsum.val +10), alpha = 0.2)+
+stanice.k <- stanice %>% select(DTM, value, year, month) %>% group_by(year) %>% mutate(cumsum.val = cumsum(value)) %>%
+  ungroup() %>% group_by(month) %>% 
+  summarise(Q10 = quantile(cumsum.val, probs = 0.1),
+            Q80 = quantile(cumsum.val, probs = 0.8)) %>% ungroup() %>% 
+  mutate(month = seq(1,12,11/(n()-1)))
+
+
+st2 <- ggplot() + 
+  geom_line(data = stanice.t, aes(month, cumsum.val, group = year, colour=factor(year), 
+                text=sprintf("DTM: %s<br>hodnota: %s", DTM, round(cumsum.val, 2))))+
+  geom_ribbon(data = stanice.k, aes(month, ymin = Q10, ymax = Q80), alpha = 0.2)+
   theme_minimal()+
   scale_colour_brewer(palette = "Set1", type = "div")+
   scale_x_continuous(breaks=c(1:12))+
   labs(color = "Rok", x = "Měsíce", y = "[mm]")
+
 
 # st2 <- ggplot() + 
 #   geom_line(data = stanice.t, aes(month, cumsum.val, group = year, colour=factor(year)))+
