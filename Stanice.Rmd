@@ -74,9 +74,9 @@ dta_actual <- dta_actual %>% left_join(st_, by="ID") %>% filter(!ID %in% c("VURV
 
 rm(dta, st_, zkr)
 
-choices.id <- unique(as.character(poloha$Oznaceni))
+choices.id <- sort(unique(as.character(poloha$Oznaceni)))
 
-mojePaleta <- c("#e6b800", "#009999", "#003366", "#000033")
+mojePaleta <- c("#e6b800", "#339966", "#009999", "#003366")
 
 ```
 
@@ -149,7 +149,8 @@ output$mapa <- renderLeaflet({
                                             fillOpacity = 1, layerId = poloha_r$Oznaceni, popup = label.points_r) %>% 
      addCircleMarkers(data = poloha_b, lng = poloha_b$coords.x1, lat = poloha_b$coords.x2, 
                                              radius = 5.5, color = "black", fillColor = "#336699", weight = 0.5, opacity = 1, 
-                                             fillOpacity = 1, layerId = poloha_b$Oznaceni, popup = label.points_b, clusterOptions=markerClusterOptions())
+                                             fillOpacity = 1, layerId = poloha_b$Oznaceni, popup = label.points_b, 
+                      clusterOptions=markerClusterOptions(zoomToBoundsOnClick = TRUE))
   print(mapa)
 
 })
