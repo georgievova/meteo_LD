@@ -24,9 +24,9 @@ library(leaflet)
 #install.packages('bit64')
 
 # input <- c()
-# input$entry.id <- "Bulhary"
+# input$entry.id <- "Bulhary1"
 # input$entry.var.updt <- "H1"
-# input$entry.year <- c(1988, 2001)
+# input$entry.year <- c(1988)
 
 # .datadir <- "s:\\SOUKROMÉ ADRESÁŘE\\Irina\\meteo_LD\\stanice_data"
 # .drive <- "K:\\Můj disk\\meteo_LD_stanice_h"
@@ -48,33 +48,32 @@ stanice_updt <- readRDS(file.path(.datadir, "libor_d_new\\stanice_updt.rds"))
 list_of_files <- dir(file.path(.drive))
 list_of_files <- list_of_files[!list_of_files == "desktop.ini"]
 i = list_of_files[1]
-dta_actual = c()
+dta_actual_orig = c()
 
 for (i in list_of_files){
   dta = read.table(file.path(.drive, i), header = F, sep = ",", dec = ".",
                    col.names = c("ID", "SIGNAL_KEY", "DTM", "value"),
                    colClasses = c("character", "factor", "character", "numeric"))
-  dta_actual = rbind(dta_actual, data.frame(name = i, dta))
+  dta_actual_orig = rbind(dta_actual_orig, data.frame(name = i, dta))
 }
 
-dta_actual$DTM <- as.POSIXct(dta_actual$DTM, tz = "GMT", format = "%Y%m%d%H%M")
+dta_actual_orig$DTM <- as.POSIXct(dta_actual_orig$DTM, tz = "GMT", format = "%Y%m%d%H%M")
 
 zkr <- read.table(file.path(.datadir, "zkr_seznam.txt"), header = TRUE, sep = " ")
-dta_actual <- merge(dta_actual, zkr, by = "SIGNAL_KEY")
+dta_actual_orig <- merge(dta_actual_orig, zkr, by = "SIGNAL_KEY")
 
 st_ <- data.frame(ID = c("VUV meteo", "Kojetice potok", "Racinka", "Oracov", "Lisany",
                          "Merboltice p", "Svitavka", "Teplica", "Bastynsky p",
                          "Podhora", "Bulhary1", "Bulhary2", "Bulhary3"),
-                  new = c("VÚV meteo", "Kojetický potok", "Račinka", "Oráčov", "Lišany",
-                          "Merboltický potok", "Svitavka", "Teplice", "Baštýnský potok",
+                  new = c("VUV meteo", "Kojeticky potok", "Racinka", "Oracov", "Lisany",
+                          "Merbolticky potok", "Svitavka", "Teplice", "Bastynsky potok",
                           "Podhora", "Bulhary1", "Bulhary2", "Bulhary3"))
 
-dta_actual <- dta_actual %>% left_join(st_, by="ID") %>% filter(!ID %in% c("VURV Oldrichov", "Prepere", "Baštýnský potok")) %>%
+dta_actual_orig <- dta_actual_orig %>% left_join(st_, by="ID") %>% filter(!ID %in% c("VURV Oldrichov", "Prepere", "Bastynsky potok")) %>%
                              select(-name, -ID, ID = new)
-
 rm(dta, st_, zkr)
 
-choices.id <- sort(unique(as.character(poloha$Oznaceni)))
+choices.id <- sort(unique(as.character(poloha$Oznaceni)), decreasing = TRUE)
 
 mojePaleta <- c("#e6b800", "#339966", "#009999", "#003366")
 
@@ -92,7 +91,7 @@ dta <- reactive({
   choices.updt <- as.character(unique(stanice_updt$SIGNAL_KEY))
   names(choices.updt) <- as.character(unique(stanice_updt$SIG_NAME))
   
-  dta_actual <- dta_actual %>% filter(ID == input$entry.id)
+  dta_actual <- dta_actual_orig %>% filter(ID == input$entry.id)
   
 
   if(input$entry.var == 'P'){
