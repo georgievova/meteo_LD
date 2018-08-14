@@ -19,32 +19,35 @@ library(ggplot2)
 library(plotly)
 library(data.table)
 library(leaflet)
+library(lubridate)
 # library(tidyr)
 
 #install.packages('bit64')
 
 # input <- c()
-# input$entry.id <- "Bulhary1"
-# input$entry.var.updt <- "H1"
+# input$entry.id <- "Bulhary3"
+# input$entry.var.updt <- "SRA1H"
 # input$entry.year <- c(1988)
 
-# .datadir <- "s:\\SOUKROMÉ ADRESÁŘE\\Irina\\meteo_LD\\stanice_data"
-# .drive <- "K:\\Můj disk\\meteo_LD_stanice_h"
+.datadir <- "/srv/shiny-server/KVHEM/meteo_LD/stanice_data"
+.drive <- "/srv/shiny-server/KVHEM/meteo_LD/meteo_LD_stanice_h"
 
-.datadir <- "C:\\Users\\irina\\Documents\\VUV\\meteo_LD\\stanice_data"
-.drive <- "C:\\Users\\irina\\Documents\\VUV\\meteo_LD_stanice_h"
+# .datadir <- "s:/SOUKROMÉ ADRESÁŘE/Irina/meteo_LD/stanice_data"
+# .drive <- "K:/Můj disk/meteo_LD_stanice_h"
+
+# .datadir <- "C:/Users/irina/Documents/VUV/meteo_LD/stanice_data"
+# .drive <- "C:/Users/irina/Documents/VUV/meteo_LD_stanice_h"
 
 #denni a mesicni data
-# stanice <- readRDS(file.path(.datadir, "denni\\stanice.rds"))
 poloha <- readRDS(file.path(.datadir, "shp_stanice.rds"))
 hranice <- readRDS(file.path(.datadir, "hranice.rds"))
 
-stanice <- readRDS(file.path(.datadir, "denni\\stanice_2017.rds"))
+stanice <- readRDS(file.path(.datadir, "denni/stanice_2017.rds"))
 
 #data za posledni rok (od ledna 2018)
-stanice_updt <- readRDS(file.path(.datadir, "libor_d_new\\stanice_updt.rds")) 
+stanice_updt <- readRDS(file.path(.datadir, "libor_d_new/stanice_updt.rds")) 
 
-#aktualni data (12h?)
+#aktualni data 
 list_of_files <- dir(file.path(.drive))
 list_of_files <- list_of_files[!list_of_files == "desktop.ini"]
 i = list_of_files[1]
@@ -263,7 +266,7 @@ ggplotly(g1, tooltip = "text")
 Row {.tabset}
 -----------------------------------------------------------------------
 
-### Měření od lednu 2018
+### Měření od ledna 2018
 
 ```{r g2}
 
@@ -274,7 +277,7 @@ renderDygraph({
 
   dta_actual <- dta()$dta_actual
   dta_actual <- dta_actual %>% filter(SIGNAL_KEY == input$entry.var.updt) %>% select(DTM, value)
-  dta_actual_48 <- dta_actual %>% filter(between(DTM, lubridate::now("GMT") - lubridate::days(2), lubridate::now("GMT")))
+  dta_actual_48 <- dta_actual %>% filter(between(DTM, now("GMT") - days(2), now("GMT")))
   dta_actual <- dta_actual[!(dta_actual$DTM %in% dta_actual_48$DTM),]
   
   dta <- rbind(stanice_updt, dta_actual)
@@ -286,7 +289,7 @@ renderDygraph({
   dta <- xts::xts(dta, order.by = dta$DTM)
   
   dygraph(dta, xlab = "Čas") %>%  
-  dyOptions(colors = RColorBrewer::brewer.pal(3, "Set1")) %>%
+  dyOptions(colors = RColorBrewer::brewer.pal(3, "Set1"), connectSeparatedPoints = TRUE) %>%
   dyRangeSelector() %>% 
   dyCrosshair(direction = "vertical")
   
@@ -300,21 +303,32 @@ renderDygraph({
 renderDygraph({
   
   dta_actual <- dta()$dta_actual
+    # dta_actual <- dta_actual_orig %>% filter(ID == input$entry.id)
   dta_actual <- dta_actual %>% filter(SIGNAL_KEY == input$entry.var.updt) %>% select(value, DTM)
-  actual_48 <- dta_actual %>% filter(between(DTM, lubridate::now("GMT") - lubridate::days(2), lubridate::now("GMT")))
+  actual_48 <- dta_actual %>% filter(between(DTM, now("GMT") - days(2), now("GMT")))
   
-  actual_48 <- xts::xts(actual_48, order.by = actual_48$DTM)
+  if(nrow(actual_48) < 3){
+    actual_48 <- data.frame(DTM = seq(now("GMT") - days(2), now("GMT"), by = "hours"), value = 0)
+    actual_48 <- xts::xts(actual_48, order.by = actual_48$DTM)
   
-  dygraph(actual_48, xlab = "Čas") %>%  
-  dyOptions(colors = RColorBrewer::brewer.pal(1, "Set1")) %>%
-  dyRangeSelector() %>% 
-  dyCrosshair(direction = "vertical")
+    dygraph(actual_48, xlab = "Čas") %>%  
+    dySeries("value", label = "Nejsou záznamy") %>%
+    dyOptions(colors = RColorBrewer::brewer.pal(1, "Set1"), connectSeparatedPoints = FALSE) %>%
+    dyCrosshair(direction = "vertical") %>% 
+    dyShading(from = now("GMT") - days(2), to = now("GMT"), color = "#e6e6e6")
+  }else{
+    actual_48 <- xts::xts(actual_48, order.by = actual_48$DTM)
+    
+    dygraph(actual_48, xlab = "Čas") %>%  
+    dyOptions(colors = RColorBrewer::brewer.pal(1, "Set1")) %>%
+    dyCrosshair(direction = "vertical")
+  }
   
 })
 ```
 
 
-### Kumulutavní srážky
+### Kumulativní sražky
 
 ```{r g3}
 renderPlotly({
