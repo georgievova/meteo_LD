@@ -215,14 +215,15 @@ renderPlotly({
       Q10 = quantile(value, probs = 0.1), 
       Q20 = quantile(value, probs = 0.2), 
       Q30 = quantile(value, probs = 0.3),
-      Q40 = quantile(value, probs = 0.4), 
+      Q40 = quantile(value, probs = 0.4),
+      median = quantile(value, probs = 0.5),
       Q60 = quantile(value, probs = 0.6), 
       Q70 = quantile(value, probs = 0.7),
       Q80 = quantile(value, probs = 0.8), 
       Q90 = quantile(value, probs = 0.9)) %>% select(-DTM, -value) %>% ungroup
   
   
-dta.long <- dta.t %>% tidyr::gather(Q, value, 2:9)
+dta.long <- dta.t %>% tidyr::gather(Q, value, 2:10)
 
 dta.long$Q <- ifelse(dta.long$Q %in% c("Q10","Q90"),"Q80",
                      ifelse(dta.long$Q %in% c("Q20","Q80"),"Q60",
@@ -231,18 +232,21 @@ dta.long$Q <- ifelse(dta.long$Q %in% c("Q10","Q90"),"Q80",
                                           ifelse(dta.long$Q %in% c("Q40","Q60"),"Q20",
                                                  dta.long$Q))))#)
 
-dta.long <- dta.long %>% group_by(Q,month) %>% summarise(Qmin = min(value), Qmax = max(value))
 
-dta.long$Q <- factor(dta.long$Q, levels=c("Q80","Q60", "Q40", "Q20"))
+dta.median <- dta.long %>% filter(Q=="median") 
+dta.long.q <- dta.long %>% filter(Q!="median") %>% group_by(Q,month) %>% summarise(Qmin = min(value), Qmax = max(value))
 
-#dta.q <- dta %>% group_by(month) %>% 
+# my_grey <- grey.colors(4, start = 0.3, end = 0.9, gamma = 2.2, alpha = NULL)
 
+dta.long.q$Q <- factor(dta.long.q$Q, levels=c("Q80","Q60", "Q40", "Q20"))
 
 g1 <-
   ggplot()+
-  geom_ribbon(data = dta.long, aes(month, ymin=Qmin, ymax=Qmax, group=Q, fill=Q,
+  geom_ribbon(data = dta.long.q, aes(month, ymin=Qmin, ymax=Qmax, group=Q, fill=Q,
               text=sprintf("mesic: %s<br>kvantil: %s<br>rozpeti: %s - %s", 
-                           dta.long$month, dta.long$Q, round(dta.long$Qmin,2), round(dta.long$Qmax,2))), alpha=0.2)+
+                           dta.long.q$month, dta.long.q$Q, round(dta.long.q$Qmin,2), round(dta.long.q$Qmax,2))), alpha=0.25)+
+  geom_line(data = dta.median, aes(month,value, color = factor(Q), group = factor(Q),
+                                   text=sprintf("mesic: %s<br>median: %s", dta.median$month, round(dta.median$value,2))), alpha=0.75)+
   # geom_line(data = dta.long[dta.long$Q == "Q50",], aes(month,Qmax), alpha=0.5)+
   geom_line(data = dta.yt, aes(month, value, group = year, color=factor(year),
                                text=sprintf("DTM: %s<br>hodnota: %s", dta.yt$DTM, round(dta.yt$value,2))),alpha = 0.75)+
@@ -251,7 +255,7 @@ g1 <-
   # scale_fill_brewer(palette = "Set3", direction = 1, type = "div",
   #                   name = " ")+
   # scale_fill_grey(start = 0.7, end = 0.4, name="")+
-  scale_colour_brewer(palette = "Set1", type = "div", direction = 1, name = " ")+
+  scale_colour_brewer(palette = "Set1", type = "div", direction = -1, name = " ")+
   scale_x_continuous(breaks=c(1:12))+
   labs(color = "Rok", x = "Měsíce", y = "Hodnota")
 # +ylim(min(bastynsky$value), max(bastynsky$value))
@@ -388,15 +392,16 @@ st.long.q$Q <- factor(st.long.q$Q, levels=c("Q80","Q60", "Q40"))
 st2 <- ggplot()+
   geom_ribbon(data = st.long.q, aes(month, ymin=Qmin, ymax=Qmax, group=Q,fill=Q,
               text=sprintf("mesic: %s<br>kvantil: %s<br>rozpeti: %s - %s", 
-                           st.long.q$month, st.long.q$Q, round(st.long.q$Qmin,2), round(st.long.q$Qmax,2))), alpha=0.3)+
-  geom_line(data = st.median, aes(month,value), alpha=1, color = "grey20")+ #text=sprintf("mesic: %s<br>median hodnota: %s", month, value)
+                           st.long.q$month, st.long.q$Q, round(st.long.q$Qmin,2), round(st.long.q$Qmax,2))), alpha=0.25)+
+  geom_line(data = st.median, aes(month,value, color = factor(Q), group = factor(Q),
+                                  text=sprintf("mesic: %s<br>median: %s", st.median$month, round(st.median$value,2))), alpha=0.75)+
   geom_line(data = stanice.t, aes(month, cumsum.val, group = year, colour=factor(year), 
                 text=sprintf("DTM: %s<br>hodnota: %s", DTM, round(cumsum.val, 2))))+
   theme_minimal()+
   # scale_fill_brewer(palette = "YlOrRd", direction = 1, type = "div",
                     # name = " ")+
-  scale_fill_grey(start = 0.7, end = 0.4)+
-  # scale_fill_manual(values = mojePaleta)+
+  # scale_fill_grey(start = 0.7, end = 0.4)+
+  scale_fill_manual(values = mojePaleta)+
   scale_colour_brewer(palette = "Set1", type = "div", direction = -1, name = " ")+
   scale_x_continuous(breaks=c(1:12))+
   labs(color = "Rok", x = "Měsíce", y = "Hodnota")
