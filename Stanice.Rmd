@@ -28,12 +28,12 @@ library(lubridate)
 # input$entry.id <- "Bulhary3"
 # input$entry.var.updt <- "SRA1H"
 # input$entry.year <- c(1988)
+# 
+# .datadir <- "/srv/shiny-server/KVHEM/meteo_LD/stanice_data"
+# .drive <- "/srv/shiny-server/KVHEM/meteo_LD/meteo_LD_stanice_h"
 
-.datadir <- "/srv/shiny-server/KVHEM/meteo_LD/stanice_data"
-.drive <- "/srv/shiny-server/KVHEM/meteo_LD/meteo_LD_stanice_h"
-
-# .datadir <- "s:/SOUKROMÉ ADRESÁŘE/Irina/meteo_LD/stanice_data"
-# .drive <- "K:/Můj disk/meteo_LD_stanice_h"
+.datadir <- "s:/SOUKROMÉ ADRESÁŘE/Irina/meteo_LD/stanice_data"
+.drive <- "K:/Můj disk/meteo_LD_stanice_h"
 
 # .datadir <- "C:/Users/irina/Documents/VUV/meteo_LD/stanice_data"
 # .drive <- "C:/Users/irina/Documents/VUV/meteo_LD_stanice_h"
@@ -291,10 +291,14 @@ renderDygraph({
   # actual_12 <- xts::xts(dta_actual_12, order.by = dta_actual_12$DTM)
   # actual_rest <- xts::xts(dta_actual_rest, order.by = dta_actual_rest$DTM)
   
+  RangeMin <- min(dta$value)-0.5
+  RangeMax <- max(dta$value)+0.5
+  
   dta <- xts::xts(dta, order.by = dta$DTM)
   
   dygraph(dta, xlab = "Čas") %>%  
   dyOptions(colors = RColorBrewer::brewer.pal(3, "Set1"), connectSeparatedPoints = TRUE) %>%
+  dyAxis("y", valueRange = c(RangeMin, RangeMax)) %>%  
   dyRangeSelector() %>% 
   dyCrosshair(direction = "vertical")
   
@@ -333,7 +337,7 @@ renderDygraph({
 ```
 
 
-### Kumulativní sražky
+### Kumulativní srážky
 
 ```{r g3}
 renderPlotly({
