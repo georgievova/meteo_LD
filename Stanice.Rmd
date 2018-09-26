@@ -207,7 +207,7 @@ renderPlotly({
   ref <- seq(1968, 2010,1)
   
   dta.yt <- dta %>% filter(year %in% input$entry.year) %>% 
-                  group_by(year) %>% mutate(month = seq(1,12,11/(n()-1)))
+                  group_by(year) %>% mutate(month = seq(1,12,11/(n()-1))) %>% ungroup()
   
   # bastynsky.yt$month <- seq(1,12,11/(nrow(bastynsky.yt)-1))
   
@@ -221,7 +221,7 @@ renderPlotly({
       Q60 = quantile(value, probs = 0.6), 
       Q70 = quantile(value, probs = 0.7),
       Q80 = quantile(value, probs = 0.8), 
-      Q90 = quantile(value, probs = 0.9)) %>% select(-DTM, -value) %>% ungroup
+      Q90 = quantile(value, probs = 0.9)) %>% select(-DTM, -value) %>% ungroup()
   
   
 dta.long <- dta.t %>% tidyr::gather(Q, value, 2:10)
@@ -235,7 +235,7 @@ dta.long$Q <- ifelse(dta.long$Q %in% c("Q10","Q90"),"Q80",
 
 
 dta.median <- dta.long %>% filter(Q=="median") 
-dta.long.q <- dta.long %>% filter(Q!="median") %>% group_by(Q,month) %>% summarise(Qmin = min(value), Qmax = max(value))
+dta.long.q <- dta.long %>% filter(Q!="median") %>% group_by(Q,month) %>% summarise(Qmin = min(value), Qmax = max(value)) %>% ungroup()
 
 # my_grey <- grey.colors(4, start = 0.3, end = 0.9, gamma = 2.2, alpha = NULL)
 
@@ -353,7 +353,7 @@ stanice <- stanice %>% select(-TMP, -month.TMP, value = P, month.val = month.P)
 
 stanice.t <- stanice %>% filter(year %in% input$entry.year) %>% 
                          group_by(year) %>% select(DTM, value, year) %>% mutate(cumsum.val = cumsum(value)) %>% 
-                         mutate(month = seq(1,12,11/(n()-1)))
+                         mutate(month = seq(1,12,11/(n()-1))) %>% ungroup()
 
 stanice.k <- stanice %>% select(DTM, value, year, month) %>% group_by(year) %>% mutate(cumsum.val = cumsum(value)) %>%
   ungroup() %>% group_by(month) %>% 
@@ -388,7 +388,7 @@ st.long$Q <- ifelse(st.long$Q %in% c("Q10","Q90"),"Q80",
                                           st.long$Q)))
 
 st.median <- st.long %>% filter(Q=="median") 
-st.long.q <- st.long %>% filter(Q!="median") %>% group_by(Q,month) %>% summarise(Qmin = min(value), Qmax = max(value))
+st.long.q <- st.long %>% filter(Q!="median") %>% group_by(Q,month) %>% summarise(Qmin = min(value), Qmax = max(value)) %>% ungroup()
 
 # my_grey <- grey.colors(4, start = 0.3, end = 0.9, gamma = 2.2, alpha = NULL)
 
@@ -434,7 +434,7 @@ stanice <- stanice %>% select(-P, -month.P, value = TMP, month.val = month.TMP)
 
 stanice.t <- stanice %>% filter(year %in% input$entry.year) %>% 
                          group_by(year) %>% select(DTM, value, year) %>% mutate(cumsum.val = cumsum(value)) %>% 
-                         mutate(month = seq(1,12,11/(n()-1)))
+                         mutate(month = seq(1,12,11/(n()-1))) %>% ungroup()
 
 stanice.k <- stanice %>% select(DTM, value, year, month) %>% group_by(year) %>% mutate(cumsum.val = cumsum(value)) %>%
   ungroup() %>% group_by(month) %>% 
@@ -469,7 +469,7 @@ st.long$Q <- ifelse(st.long$Q %in% c("Q10","Q90"),"Q80",
                                           st.long$Q)))
 
 st.median <- st.long %>% filter(Q=="median") 
-st.long.q <- st.long %>% filter(Q!="median") %>% group_by(Q,month) %>% summarise(Qmin = min(value), Qmax = max(value))
+st.long.q <- st.long %>% filter(Q!="median") %>% group_by(Q,month) %>% summarise(Qmin = min(value), Qmax = max(value)) %>% ungroup()
 
 # my_grey <- grey.colors(4, start = 0.3, end = 0.9, gamma = 2.2, alpha = NULL)
 
