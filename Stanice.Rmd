@@ -46,7 +46,7 @@ stanice <- readRDS(file.path(.datadir, "denni/stanice_2017.rds"))
 
 # data za posledni rok (od ledna 2018 do 23.09.2018 11:30)
 # stanice_updt <- readRDS(file.path(.datadir, "libor_d_new/stanice_updt.rds")) 
-stanice_updt <- readRDS(file.path(.datadir, "libor_d_new/stanice_updt_201809231130.rds")) 
+stanice_updt <- readRDS(file.path(.datadir, "libor_d_new/stanice_updt_201901211400.rds")) 
 
 #aktualni data 
 list_of_files <- dir(file.path(.drive))
